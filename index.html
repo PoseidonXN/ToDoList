@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   
-  <!-- iOS PWA 獨立運行與圖示設定 -->
+  <!-- iOS PWA 設定 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="To-Do List" />
   <link rel="apple-touch-icon" href="Icon_180x180.png" />
   <link rel="icon" type="image/png" href="Icon.png" />
 
-  <!-- 內嵌 Manifest 設定 (無須另存 manifest.json 檔案) -->
+  <!-- 內嵌 PWA Manifest -->
   <link rel="manifest" href='data:application/manifest+json;utf-8,%7B%22name%22%3A%22To-Do%20List%22%2C%22short_name%22%3A%22To-Do%22%2C%22start_url%22%3A%22.%2Findex.html%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FBF9F5%22%2C%22theme_color%22%3A%22%23FBF9F5%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22Icon.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22Icon_180x180.png%22%2C%22sizes%22%3A%22180x180%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D' />
 
   <title>To-Do List</title>
@@ -42,9 +42,17 @@
     
     <!-- 頂部置中標題與工具列 -->
     <header id="appHeader" class="flex flex-col items-center gap-3.5 border-b pb-4 w-full">
-      <h1 id="appTitle" class="text-2xl sm:text-3xl font-bold tracking-tight text-center">To-Do List</h1>
+      <div class="flex items-center justify-between w-full px-1">
+        <div class="w-16"></div>
+        <h1 id="appTitle" class="text-2xl sm:text-3xl font-bold tracking-tight text-center flex-1">To-Do List</h1>
+        <div class="w-16 flex justify-end">
+          <button id="authBtn" onclick="handleAuthAction()" class="text-xs px-2.5 py-1 rounded-xl border opacity-80 hover:opacity-100 transition">
+            登入
+          </button>
+        </div>
+      </div>
       
-      <!-- 居中功能按鈕列 -->
+      <!-- 功能按鈕列 -->
       <div class="flex items-center justify-center gap-2 flex-wrap w-full">
         <select id="themeSelector" onchange="changeTheme(this.value)" class="px-2.5 py-1.5 rounded-xl border text-xs font-medium focus:outline-none cursor-pointer">
           <option value="warm">📜 溫暖紙感</option>
@@ -199,6 +207,139 @@
     </div>
   </div>
 
+  <!-- Firebase 模組與資料邏輯 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getAuth, 
+      signInWithPopup, 
+      signOut, 
+      GoogleAuthProvider, 
+      onAuthStateChanged,
+      setPersistence,
+      browserLocalPersistence 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      doc, 
+      setDoc, 
+      deleteDoc, 
+      onSnapshot,
+      enableIndexedDbPersistence 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // 填入你圖片中的專屬配置
+    const firebaseConfig = {
+      apiKey: "AIzaSyD5woha0e3n2vc03u82hN5UPwXemgiZjWM",
+      authDomain: "todolist-2aa90.firebaseapp.com",
+      projectId: "todolist-2aa90",
+      storageBucket: "todolist-2aa90.firebasestorage.app",
+      messagingSenderId: "318238770933",
+      appId: "1:318238770933:web:52c3e67f2f98413d36a7bc",
+      measurementId: "G-R5M4NTN97F"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // 啟用本地離線快取（離線照常讀寫）
+    enableIndexedDbPersistence(db).catch(() => {});
+    setPersistence(auth, browserLocalPersistence);
+
+    let currentUser = null;
+    let unsubscribeTasks = null;
+    let unsubscribeCategories = null;
+
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      const authBtn = document.getElementById('authBtn');
+      if (user) {
+        authBtn.innerText = '登出';
+        authBtn.title = user.email;
+        // 記錄最後登入時間供 Admin Panel 統計
+        setDoc(doc(db, `users/${user.uid}`), {
+          email: user.email,
+          displayName: user.displayName || '',
+          lastActiveAt: Date.now()
+        }, { merge: true });
+
+        bindFirestoreData(user.uid);
+      } else {
+        authBtn.innerText = 'Google 登入';
+        if (unsubscribeTasks) unsubscribeTasks();
+        if (unsubscribeCategories) unsubscribeCategories();
+        tasks = [];
+        categories = [
+          { id: 'cat_work', name: '工作教案' },
+          { id: 'cat_life', name: '日常待辦' }
+        ];
+        renderTabs();
+        render();
+      }
+    });
+
+    window.handleAuthAction = function() {
+      if (currentUser) {
+        if (confirm('確定要登出嗎？')) signOut(auth);
+      } else {
+        const provider = new GoogleAuthProvider();
+        signInWithPopup(auth, provider).catch(err => alert("登入失敗: " + err.message));
+      }
+    };
+
+    function bindFirestoreData(uid) {
+      // 1. 同步清單分類
+      const catRef = collection(db, `users/${uid}/categories`);
+      unsubscribeCategories = onSnapshot(catRef, (snap) => {
+        if (!snap.empty) {
+          categories = [];
+          snap.forEach(d => categories.push({ id: d.id, ...d.data() }));
+        } else {
+          // 初始化預設分類
+          const defaultCats = [
+            { id: 'cat_work', name: '工作教案' },
+            { id: 'cat_life', name: '日常待辦' }
+          ];
+          defaultCats.forEach(c => setDoc(doc(db, `users/${uid}/categories`, c.id), { name: c.name }));
+          categories = defaultCats;
+        }
+        renderTabs();
+      });
+
+      // 2. 同步任務項目
+      const taskRef = collection(db, `users/${uid}/tasks`);
+      unsubscribeTasks = onSnapshot(taskRef, (snap) => {
+        tasks = [];
+        snap.forEach(d => tasks.push({ id: d.id, ...d.data() }));
+        applyCurrentSort();
+      });
+    }
+
+    // 暴露雲端存取介面
+    window.dbSaveTask = async (task) => {
+      if (!currentUser) return;
+      await setDoc(doc(db, `users/${currentUser.uid}/tasks`, task.id), task, { merge: true });
+    };
+
+    window.dbDeleteTask = async (taskId) => {
+      if (!currentUser) return;
+      await deleteDoc(doc(db, `users/${currentUser.uid}/tasks`, taskId));
+    };
+
+    window.dbSaveCategory = async (cat) => {
+      if (!currentUser) return;
+      await setDoc(doc(db, `users/${currentUser.uid}/categories`, cat.id), { name: cat.name });
+    };
+
+    window.dbDeleteCategory = async (catId) => {
+      if (!currentUser) return;
+      await deleteDoc(doc(db, `users/${currentUser.uid}/categories`, catId));
+    };
+  </script>
+
+  <!-- 主題、UI 與互動邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -414,20 +555,13 @@
 
     let categories = [
       { id: 'cat_work', name: '工作教案' },
-      { id: 'cat_life', name: '日常待辦' },
-      { id: 'cat_nas',  name: 'NAS系統' }
+      { id: 'cat_life', name: '日常待辦' }
     ];
 
     let currentTab = 'all';
     let currentViewingTaskId = null;
     let isEditing = false;
-
-    let tasks = [
-      { id: '1', listId: 'cat_work', title: '準備分組閱讀探究教材', priority: 'High', dueDate: '2026-09-17', isCompleted: false, createdAt: '2026-09-14 09:30', completedAt: null },
-      { id: '2', listId: 'cat_nas',  title: '檢查反向代理與 SSL 續期', priority: 'Medium', dueDate: '2026-09-18', isCompleted: false, createdAt: '2026-09-15 08:15', completedAt: null },
-      { id: '3', listId: 'cat_life', title: '購買健身乳清蛋白粉', priority: 'Low', dueDate: '2026-09-20', isCompleted: false, createdAt: '2026-09-15 10:00', completedAt: null }
-    ];
-
+    let tasks = [];
     let currentSort = 'deadline';
     let draggedIndex = null;
 
@@ -489,6 +623,7 @@
       const newName = prompt(`請輸入清單「${cat.name}」的新名稱：`, cat.name);
       if (newName && newName.trim() && newName.trim() !== cat.name) {
         cat.name = newName.trim();
+        if (window.dbSaveCategory) window.dbSaveCategory(cat);
         renderTabs();
         render();
       }
@@ -504,8 +639,10 @@
         : `確定要刪除清單「${cat.name}」嗎？`;
 
       if (confirm(confirmMsg)) {
-        categories = categories.filter(c => c.id !== catId);
-        tasks = tasks.filter(t => t.listId !== catId);
+        if (window.dbDeleteCategory) window.dbDeleteCategory(catId);
+        tasks.filter(t => t.listId === catId).forEach(t => {
+          if (window.dbDeleteTask) window.dbDeleteTask(t.id);
+        });
         if (currentTab === catId) currentTab = 'all';
         renderTabs();
         applyCurrentSort();
@@ -516,7 +653,9 @@
       const name = prompt('請輸入新清單名稱：');
       if (!name || !name.trim()) return;
       const newId = 'cat_' + Date.now();
-      categories.push({ id: newId, name: name.trim() });
+      const newCat = { id: newId, name: name.trim() };
+      categories.push(newCat);
+      if (window.dbSaveCategory) window.dbSaveCategory(newCat);
       switchTab(newId);
     }
 
@@ -611,6 +750,7 @@
       } else {
         task.completedAt = null;
       }
+      if (window.dbSaveTask) window.dbSaveTask(task);
       applyCurrentSort();
     }
 
@@ -619,12 +759,12 @@
       if (!title) return;
       const priority = document.getElementById('taskPriority').value;
       const dueDate = document.getElementById('taskDueDate').value;
-      const targetList = document.getElementById('taskTargetList').value;
+      const targetList = document.getElementById('taskTargetList').value || 'cat_work';
       
       const now = new Date();
       const createdAt = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-      tasks.push({
+      const newTask = {
         id: Date.now().toString(),
         listId: targetList,
         title,
@@ -633,7 +773,10 @@
         isCompleted: false,
         createdAt,
         completedAt: null
-      });
+      };
+
+      tasks.push(newTask);
+      if (window.dbSaveTask) window.dbSaveTask(newTask);
 
       document.getElementById('taskInput').value = '';
       applyCurrentSort();
@@ -698,6 +841,9 @@
       }
 
       const idsToRemove = Array.from(indicesToDelete).map(idx => activeInView[idx].id);
+      idsToRemove.forEach(id => {
+        if (window.dbDeleteTask) window.dbDeleteTask(id);
+      });
       tasks = tasks.filter(t => !idsToRemove.includes(t.id));
       render();
       alert(`已將選取的編號任務移至回收站。`);
@@ -787,6 +933,8 @@
       task.listId = document.getElementById('editListSelect').value;
       task.priority = document.getElementById('editPrioritySelect').value;
       task.dueDate = document.getElementById('editDueDateInput').value || null;
+
+      if (window.dbSaveTask) window.dbSaveTask(task);
 
       updateModalView(task);
       isEditing = false;
