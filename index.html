@@ -44,11 +44,11 @@
 <body id="appBody" class="min-h-screen flex flex-col items-center p-3.5 sm:p-8 relative">
 
   <!-- 唯讀分享快照橫幅（若為接收者檢視模式時顯示） -->
-  <aside id="shareBanner" aria-label="分享模式通知" class="hidden w-full max-w-2xl mb-4 p-3 bg-amber-100/90 text-amber-900 border border-amber-300 rounded-2xl flex items-center justify-between shadow-sm">
+  <aside id="shareBanner" aria-label="分享模式通知" class="hidden w-full max-w-2xl mb-4 p-3.5 bg-amber-100/90 text-amber-900 border border-amber-300 rounded-2xl flex items-center justify-between shadow-sm">
     <div class="text-xs">
       <span class="font-bold">📸 清單靜態快照</span> · <span id="shareBannerSubtitle">唯讀檢視</span>
     </div>
-    <a href="./index.html" class="text-xs font-semibold underline px-2 py-1 rounded hover:bg-amber-200/60 transition">
+    <a href="./index.html" class="text-xs font-semibold underline px-2.5 py-1 rounded-lg hover:bg-amber-200/60 transition">
       返回我的清單
     </a>
   </aside>
@@ -327,7 +327,7 @@
     </div>
   </div>
 
-  <!-- Firebase 模組與資料邏輯 (加入快照分享支援) -->
+  <!-- Firebase 模組 (已修復快照讀取與資料通道) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { 
@@ -371,7 +371,7 @@
     let unsubscribeTasks = null;
     let unsubscribeCategories = null;
 
-    // 檢查網址列是否有 ?share=ID (接收者快照模式)
+    // 檢查 URL Query 是否包含 ?share=ID (唯讀快照模式)
     const urlParams = new URLSearchParams(window.location.search);
     const shareId = urlParams.get('share');
 
@@ -383,33 +383,28 @@
       initAuthObserver();
     }
 
-    // 載入靜態快照資料
     async function loadSharedSnapshot(id) {
       try {
         const snapDoc = await getDoc(doc(db, "shared_lists", id));
         if (snapDoc.exists()) {
           const data = snapDoc.data();
-          window.categories = data.categories || [];
-          window.tasks = data.tasks || [];
-          window.currentTab = data.tabId || 'all';
+          window.isReadOnlyShareMode = true;
 
-          // 顯示快照橫幅
-          document.getElementById('shareBanner').classList.remove('hidden');
-          document.getElementById('shareBannerSubtitle').innerText = `${data.listTitle || '全部工作'} (發布於 ${data.sharedAt || ''})`;
-
-          // 隱藏編輯操作區
-          document.getElementById('inputCard').classList.add('hidden');
-          document.getElementById('addListBtn').classList.add('hidden');
-          document.getElementById('authBtn').classList.add('hidden');
-          document.getElementById('shareBtn').classList.add('hidden');
-
-          renderTabs();
-          applyCurrentSort();
+          // 透過輪詢通道確保底層 render 函數準備妥當後立即注入快照
+          const injectSnapshot = () => {
+            if (window.applySnapshotData) {
+              window.applySnapshotData(data);
+            } else {
+              setTimeout(injectSnapshot, 40);
+            }
+          };
+          injectSnapshot();
         } else {
-          alert("該分享清單不存在或已被移除。");
-          window.location.href = './index.html';
+          alert("該分享清單快照不存在或已失效。");
+          window.location.href = window.location.pathname;
         }
       } catch (err) {
+        console.error(err);
         alert("載入分享內容失敗: " + err.message);
       }
     }
@@ -432,13 +427,7 @@
           authBtn.innerText = 'Google 登入';
           if (unsubscribeTasks) unsubscribeTasks();
           if (unsubscribeCategories) unsubscribeCategories();
-          tasks = [];
-          categories = [
-            { id: 'cat_work', name: '工作教案', order: 0 },
-            { id: 'cat_life', name: '日常待辦', order: 1 }
-          ];
-          renderTabs();
-          render();
+          if (window.resetToGuestData) window.resetToGuestData();
         }
       });
     }
@@ -455,33 +444,33 @@
     function bindFirestoreData(uid) {
       const catRef = collection(db, `users/${uid}/categories`);
       unsubscribeCategories = onSnapshot(catRef, (snap) => {
+        const loadedCats = [];
         if (!snap.empty) {
-          categories = [];
           snap.forEach(d => {
             const data = d.data();
-            categories.push({ id: d.id, name: data.name, order: data.order ?? 999 });
+            loadedCats.push({ id: d.id, name: data.name, order: data.order ?? 999 });
           });
-          categories.sort((a, b) => a.order - b.order);
+          loadedCats.sort((a, b) => a.order - b.order);
+          if (window.syncCategoriesFromDB) window.syncCategoriesFromDB(loadedCats);
         } else {
           const defaultCats = [
             { id: 'cat_work', name: '工作教案', order: 0 },
             { id: 'cat_life', name: '日常待辦', order: 1 }
           ];
           defaultCats.forEach(c => setDoc(doc(db, `users/${uid}/categories`, c.id), c));
-          categories = defaultCats;
+          if (window.syncCategoriesFromDB) window.syncCategoriesFromDB(defaultCats);
         }
-        renderTabs();
       });
 
       const taskRef = collection(db, `users/${uid}/tasks`);
       unsubscribeTasks = onSnapshot(taskRef, (snap) => {
-        tasks = [];
-        snap.forEach(d => tasks.push({ id: d.id, ...d.data() }));
-        applyCurrentSort();
+        const loadedTasks = [];
+        snap.forEach(d => loadedTasks.push({ id: d.id, ...d.data() }));
+        if (window.syncTasksFromDB) window.syncTasksFromDB(loadedTasks);
       });
     }
 
-    // 生成並上傳目前視圖的靜態快照
+    // 生成並上傳快照
     window.dbCreateSnapshot = async (snapshotData) => {
       const snapId = 'snap_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
       await setDoc(doc(db, 'shared_lists', snapId), snapshotData);
@@ -520,7 +509,7 @@
     };
   </script>
 
-  <!-- 主題、UI、長按拖曳與快照分享互動邏輯 -->
+  <!-- 主題、UI、長按拖曳與快照渲染核心邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -647,7 +636,65 @@
       render();
     }
 
-    // 快照分享邏輯
+    // 業務狀態變數
+    let categories = [
+      { id: 'cat_work', name: '工作教案', order: 0 },
+      { id: 'cat_life', name: '日常待辦', order: 1 }
+    ];
+
+    let currentTab = 'all';
+    let currentViewingTaskId = null;
+    let isEditing = false;
+    let tasks = [];
+    let currentSort = 'deadline';
+    let sortableTabsInstance = null;
+
+    let activeLongPressCatId = null;
+    let longPressTimer = null;
+    let isDraggingTab = false;
+
+    // 關鍵修復：供 Firebase 模組注入快照資料
+    window.applySnapshotData = function(data) {
+      tasks = data.tasks || [];
+      categories = data.categories || [];
+      currentTab = 'all'; // 快照以全部工作方式完整展示
+
+      // 顯示快照提示橫幅
+      const banner = document.getElementById('shareBanner');
+      if (banner) banner.classList.remove('hidden');
+      const subtitle = document.getElementById('shareBannerSubtitle');
+      if (subtitle) subtitle.innerText = `${data.listTitle || '全部工作'} (發布於 ${data.sharedAt || ''})`;
+
+      // 隱藏非唯讀互動組件
+      document.getElementById('inputCard')?.classList.add('hidden');
+      document.getElementById('addListBtn')?.classList.add('hidden');
+      document.getElementById('authBtn')?.classList.add('hidden');
+      document.getElementById('shareBtn')?.classList.add('hidden');
+
+      renderTabs();
+      applyCurrentSort();
+    };
+
+    // 供 Firebase 模組登入同步
+    window.syncCategoriesFromDB = function(newCats) {
+      categories = newCats;
+      renderTabs();
+    };
+    window.syncTasksFromDB = function(newTasks) {
+      tasks = newTasks;
+      applyCurrentSort();
+    };
+    window.resetToGuestData = function() {
+      tasks = [];
+      categories = [
+        { id: 'cat_work', name: '工作教案', order: 0 },
+        { id: 'cat_life', name: '日常待辦', order: 1 }
+      ];
+      renderTabs();
+      render();
+    };
+
+    // 快照分享生成邏輯
     async function handleShareCurrentList() {
       const currentListTasks = (currentTab === 'all' 
         ? tasks 
@@ -685,22 +732,18 @@
 
         const shareUrl = `${window.location.origin}${window.location.pathname}?share=${snapId}`;
 
-        // 優先嘗試調用 iOS / 手機原生分享選單
         if (navigator.share) {
           try {
             await navigator.share({
               title: `To-Do 快照：${listTitle}`,
-              text: `這是 ${listTitle} 的最新待辦任務快照（發布於 ${sharedAt}）：`,
+              text: `這是 ${listTitle} 的待辦任務快照（發布於 ${sharedAt}）：`,
               url: shareUrl
             });
             shareBtn.innerHTML = '<span>📤</span><span>分享</span>';
             return;
-          } catch (e) {
-            // 用戶取消或不支援則 fallback 至彈窗
-          }
+          } catch (e) {}
         }
 
-        // 彈出連結複製彈窗
         document.getElementById('shareUrlInput').value = shareUrl;
         document.getElementById('shareResultModal').classList.remove('hidden');
         document.getElementById('shareResultModal').classList.add('flex');
@@ -743,6 +786,7 @@
       promptBatchDelete();
     }
 
+    // 鼓勵庫
     const defaultPraises = [
       { icon: '✨', text: '搞掂一單！今日又進步咗少少。' },
       { icon: '👏', text: '做得好！專注力滿分！' },
@@ -833,22 +877,6 @@
       }
     }
 
-    let categories = [
-      { id: 'cat_work', name: '工作教案', order: 0 },
-      { id: 'cat_life', name: '日常待辦', order: 1 }
-    ];
-
-    let currentTab = 'all';
-    let currentViewingTaskId = null;
-    let isEditing = false;
-    let tasks = [];
-    let currentSort = 'deadline';
-    let sortableTabsInstance = null;
-
-    let activeLongPressCatId = null;
-    let longPressTimer = null;
-    let isDraggingTab = false;
-
     function renderTabs() {
       const theme = themes[currentThemeKey];
       const fixedContainer = document.getElementById('fixedTabContainer');
@@ -857,7 +885,7 @@
       
       fixedContainer.innerHTML = '';
       sortableContainer.innerHTML = '';
-      select.innerHTML = '';
+      if (select) select.innerHTML = '';
 
       const allBtn = document.createElement('button');
       allBtn.className = `px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 ${currentTab === 'all' ? theme.activeTab : theme.inactiveTab}`;
@@ -906,11 +934,13 @@
 
         sortableContainer.appendChild(tab);
 
-        const opt = document.createElement('option');
-        opt.value = cat.id;
-        opt.innerText = cat.name;
-        if (currentTab === cat.id) opt.selected = true;
-        select.appendChild(opt);
+        if (select) {
+          const opt = document.createElement('option');
+          opt.value = cat.id;
+          opt.innerText = cat.name;
+          if (currentTab === cat.id) opt.selected = true;
+          select.appendChild(opt);
+        }
       });
 
       if (!window.isReadOnlyShareMode) {
@@ -1029,9 +1059,10 @@
       activeList.innerHTML = '';
       completedList.innerHTML = '';
 
-      const filteredTasks = currentTab === 'all' 
+      // 唯讀快照模式下直接渲染快照包含的全部任務
+      const filteredTasks = window.isReadOnlyShareMode 
         ? tasks 
-        : tasks.filter(t => t.listId === currentTab);
+        : (currentTab === 'all' ? tasks : tasks.filter(t => t.listId === currentTab));
 
       const activeTasks = filteredTasks.filter(t => !t.isCompleted);
       const completedTasks = filteredTasks.filter(t => t.isCompleted);
@@ -1057,7 +1088,7 @@
             <div class="min-w-0 pr-3 flex-1">
               <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5">
                 <span class="text-base font-semibold tracking-tight truncate">${task.title}</span>
-                ${currentTab === 'all' ? `<span class="text-[11px] px-2 py-0.5 rounded-md font-medium border border-current opacity-60 w-fit">${catName}</span>` : ''}
+                ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[11px] px-2 py-0.5 rounded-md font-medium border border-current opacity-60 w-fit">${catName}</span>` : ''}
               </div>
             </div>
           </div>
@@ -1101,7 +1132,7 @@
             </button>
             <div class="flex items-center gap-2 truncate pr-2">
               <span class="text-sm sm:text-base line-through truncate opacity-50">${task.title}</span>
-              ${currentTab === 'all' ? `<span class="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 border ${theme.borderColor} opacity-50">${catName}</span>` : ''}
+              ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 border ${theme.borderColor} opacity-50">${catName}</span>` : ''}
             </div>
           </div>
           <span class="text-[11px] opacity-50 font-mono flex-shrink-0">完成於: ${task.completedAt}</span>
@@ -1274,7 +1305,6 @@
         editListSelect.appendChild(opt);
       });
 
-      // 唯讀快照模式下隱藏修改與刪除按鈕
       if (window.isReadOnlyShareMode) {
         document.getElementById('editToggleBtn').classList.add('hidden');
         document.getElementById('modalDeleteBtn').classList.add('hidden');
