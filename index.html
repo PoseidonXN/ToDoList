@@ -43,6 +43,16 @@
 </head>
 <body id="appBody" class="min-h-screen flex flex-col items-center p-3.5 sm:p-8 relative">
 
+  <!-- 唯讀分享快照橫幅（若為接收者檢視模式時顯示） -->
+  <aside id="shareBanner" aria-label="分享模式通知" class="hidden w-full max-w-2xl mb-4 p-3 bg-amber-100/90 text-amber-900 border border-amber-300 rounded-2xl flex items-center justify-between shadow-sm">
+    <div class="text-xs">
+      <span class="font-bold">📸 清單靜態快照</span> · <span id="shareBannerSubtitle">唯讀檢視</span>
+    </div>
+    <a href="./index.html" class="text-xs font-semibold underline px-2 py-1 rounded hover:bg-amber-200/60 transition">
+      返回我的清單
+    </a>
+  </aside>
+
   <!-- 鼓勵讚賞 Toast 提示 -->
   <div id="praiseToast" class="fixed bottom-6 z-50 transition-all duration-300 transform translate-y-20 opacity-0 pointer-events-none flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl border">
     <span class="text-base" id="toastIcon">✨</span>
@@ -51,10 +61,17 @@
 
   <main class="w-full max-w-2xl space-y-6 pb-20">
     
-    <!-- 頂部標題列：置中 To-Do List，右側收納 Setting 掣與登入狀態 -->
+    <!-- 頂部標題列：左上角新增「📤 分享」掣 -->
     <header id="appHeader" class="flex items-center justify-between border-b pb-4 w-full px-1">
-      <div class="w-20"></div>
+      <div class="w-auto flex items-center justify-start">
+        <button onclick="handleShareCurrentList()" id="shareBtn" class="text-xs px-3 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm">
+          <span>📤</span>
+          <span>分享</span>
+        </button>
+      </div>
+
       <h1 id="appTitle" class="text-2xl sm:text-3xl font-bold tracking-tight text-center flex-1">To-Do List</h1>
+
       <div class="w-auto flex items-center gap-2 justify-end">
         <button onclick="openSettingsModal()" id="settingsBtn" class="p-2 rounded-xl border opacity-80 hover:opacity-100 transition flex items-center justify-center" title="應用程式設定">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -66,7 +83,7 @@
     </header>
 
     <!-- 清單分類切換欄 (Tabs 放大一倍) -->
-    <section class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
+    <section id="tabsSection" class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
       <div id="fixedTabContainer" class="flex-shrink-0"></div>
       <div id="sortableTabsContainer" class="flex items-center gap-2.5 flex-nowrap"></div>
       <button onclick="promptAddNewList()" id="addListBtn" class="px-5 py-3 rounded-2xl border border-dashed text-sm font-semibold whitespace-nowrap transition flex-shrink-0">
@@ -102,7 +119,7 @@
       </div>
     </section>
 
-    <!-- 進行中列表 (Active Tasks，卡片放大，整條帶柔和顏色) -->
+    <!-- 進行中列表 (Active Tasks) -->
     <section class="space-y-3.5">
       <div class="flex justify-between items-center px-1">
         <h2 id="activeHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">待辦事項 (<span id="activeCount">0</span>)</h2>
@@ -122,7 +139,34 @@
 
   </main>
 
-  <!-- 全新「⚙️ 設定」管理 Modal（收納風格、鼓勵庫、排序、批次刪除） -->
+  <!-- 分享成功彈窗 Modal -->
+  <div id="shareResultModal" class="fixed inset-0 backdrop-blur-sm hidden items-center justify-center p-4 z-50 transition-opacity">
+    <div id="shareResultBox" class="max-w-md w-full rounded-3xl p-6 space-y-4 border shadow-2xl">
+      <div class="flex justify-between items-center border-b pb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🔗</span>
+          <h3 class="text-base font-bold">快照分享連結已生成</h3>
+        </div>
+        <button onclick="closeShareResultModal()" class="opacity-60 hover:opacity-100 text-sm p-1">✕</button>
+      </div>
+      <p class="text-xs opacity-70 leading-relaxed">
+        接收者點開此連結即可查閱此清單<span class="font-bold underline">目前這一刻</span>的待辦快照，不會隨後續改動而自動更新，亦無須登入。
+      </p>
+      <div class="flex items-center gap-2">
+        <input id="shareUrlInput" type="text" readonly class="w-full text-xs p-2.5 rounded-xl border bg-stone-50/70 select-all focus:outline-none font-mono" />
+        <button onclick="copyShareUrl()" id="copyShareBtn" class="px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition border">
+          複製
+        </button>
+      </div>
+      <div class="pt-2">
+        <button onclick="closeShareResultModal()" class="w-full py-2.5 rounded-xl border text-xs font-semibold transition opacity-80 hover:opacity-100">
+          完成
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全新「⚙️ 設定」管理 Modal -->
   <div id="settingsModal" class="fixed inset-0 backdrop-blur-sm hidden items-center justify-center p-4 z-50 transition-opacity">
     <div id="settingsModalBox" class="max-w-md w-full rounded-3xl p-6 space-y-5 border shadow-2xl">
       <div class="flex justify-between items-center border-b pb-3">
@@ -134,7 +178,6 @@
       </div>
 
       <div class="space-y-4 text-xs">
-        <!-- 主題切換 -->
         <div class="flex items-center justify-between p-3 rounded-2xl border border-stone-200/50">
           <span class="font-medium">介面風格主題</span>
           <select id="themeSelector" onchange="changeTheme(this.value)" class="px-3 py-1.5 rounded-xl border text-xs font-medium focus:outline-none cursor-pointer">
@@ -144,7 +187,6 @@
           </select>
         </div>
 
-        <!-- 排序方式 -->
         <div class="flex items-center justify-between p-3 rounded-2xl border border-stone-200/50">
           <div>
             <div class="font-medium">任務排序方式</div>
@@ -155,7 +197,6 @@
           </button>
         </div>
 
-        <!-- 鼓勵庫管理 -->
         <div class="flex items-center justify-between p-3 rounded-2xl border border-stone-200/50">
           <div>
             <div class="font-medium">完成任務鼓勵字句</div>
@@ -166,7 +207,6 @@
           </button>
         </div>
 
-        <!-- 批次刪除 -->
         <div class="flex items-center justify-between p-3 rounded-2xl border border-rose-200/60 bg-rose-50/40">
           <div>
             <div class="font-medium text-rose-700">批次清理任務</div>
@@ -277,7 +317,7 @@
       </div>
 
       <div class="pt-2 flex gap-2">
-        <button onclick="deleteCurrentTask()" class="py-2 px-3 border border-rose-300 bg-rose-50 text-rose-700 rounded-xl text-xs font-semibold hover:bg-rose-100 transition flex items-center justify-center gap-1 flex-shrink-0">
+        <button id="modalDeleteBtn" onclick="deleteCurrentTask()" class="py-2 px-3 border border-rose-300 bg-rose-50 text-rose-700 rounded-xl text-xs font-semibold hover:bg-rose-100 transition flex items-center justify-center gap-1 flex-shrink-0">
           🗑️ 刪除
         </button>
         <button id="modalActionBtn" onclick="closeModal()" class="w-full py-2 border rounded-xl text-xs font-semibold transition">
@@ -287,7 +327,7 @@
     </div>
   </div>
 
-  <!-- Firebase 模組與資料邏輯 -->
+  <!-- Firebase 模組與資料邏輯 (加入快照分享支援) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { 
@@ -304,6 +344,7 @@
       collection, 
       doc, 
       setDoc, 
+      getDoc,
       deleteDoc, 
       onSnapshot,
       enableIndexedDbPersistence 
@@ -330,32 +371,77 @@
     let unsubscribeTasks = null;
     let unsubscribeCategories = null;
 
-    onAuthStateChanged(auth, (user) => {
-      currentUser = user;
-      const authBtn = document.getElementById('authBtn');
-      if (user) {
-        authBtn.innerText = '登出';
-        authBtn.title = user.email;
-        setDoc(doc(db, `users/${user.uid}`), {
-          email: user.email,
-          displayName: user.displayName || '',
-          lastActiveAt: Date.now()
-        }, { merge: true });
+    // 檢查網址列是否有 ?share=ID (接收者快照模式)
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareId = urlParams.get('share');
 
-        bindFirestoreData(user.uid);
-      } else {
-        authBtn.innerText = 'Google 登入';
-        if (unsubscribeTasks) unsubscribeTasks();
-        if (unsubscribeCategories) unsubscribeCategories();
-        tasks = [];
-        categories = [
-          { id: 'cat_work', name: '工作教案', order: 0 },
-          { id: 'cat_life', name: '日常待辦', order: 1 }
-        ];
-        renderTabs();
-        render();
+    if (shareId) {
+      window.isReadOnlyShareMode = true;
+      loadSharedSnapshot(shareId);
+    } else {
+      window.isReadOnlyShareMode = false;
+      initAuthObserver();
+    }
+
+    // 載入靜態快照資料
+    async function loadSharedSnapshot(id) {
+      try {
+        const snapDoc = await getDoc(doc(db, "shared_lists", id));
+        if (snapDoc.exists()) {
+          const data = snapDoc.data();
+          window.categories = data.categories || [];
+          window.tasks = data.tasks || [];
+          window.currentTab = data.tabId || 'all';
+
+          // 顯示快照橫幅
+          document.getElementById('shareBanner').classList.remove('hidden');
+          document.getElementById('shareBannerSubtitle').innerText = `${data.listTitle || '全部工作'} (發布於 ${data.sharedAt || ''})`;
+
+          // 隱藏編輯操作區
+          document.getElementById('inputCard').classList.add('hidden');
+          document.getElementById('addListBtn').classList.add('hidden');
+          document.getElementById('authBtn').classList.add('hidden');
+          document.getElementById('shareBtn').classList.add('hidden');
+
+          renderTabs();
+          applyCurrentSort();
+        } else {
+          alert("該分享清單不存在或已被移除。");
+          window.location.href = './index.html';
+        }
+      } catch (err) {
+        alert("載入分享內容失敗: " + err.message);
       }
-    });
+    }
+
+    function initAuthObserver() {
+      onAuthStateChanged(auth, (user) => {
+        currentUser = user;
+        const authBtn = document.getElementById('authBtn');
+        if (user) {
+          authBtn.innerText = '登出';
+          authBtn.title = user.email;
+          setDoc(doc(db, `users/${user.uid}`), {
+            email: user.email,
+            displayName: user.displayName || '',
+            lastActiveAt: Date.now()
+          }, { merge: true });
+
+          bindFirestoreData(user.uid);
+        } else {
+          authBtn.innerText = 'Google 登入';
+          if (unsubscribeTasks) unsubscribeTasks();
+          if (unsubscribeCategories) unsubscribeCategories();
+          tasks = [];
+          categories = [
+            { id: 'cat_work', name: '工作教案', order: 0 },
+            { id: 'cat_life', name: '日常待辦', order: 1 }
+          ];
+          renderTabs();
+          render();
+        }
+      });
+    }
 
     window.handleAuthAction = function() {
       if (currentUser) {
@@ -395,18 +481,25 @@
       });
     }
 
+    // 生成並上傳目前視圖的靜態快照
+    window.dbCreateSnapshot = async (snapshotData) => {
+      const snapId = 'snap_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      await setDoc(doc(db, 'shared_lists', snapId), snapshotData);
+      return snapId;
+    };
+
     window.dbSaveTask = async (task) => {
-      if (!currentUser) return;
+      if (!currentUser || window.isReadOnlyShareMode) return;
       await setDoc(doc(db, `users/${currentUser.uid}/tasks`, task.id), task, { merge: true });
     };
 
     window.dbDeleteTask = async (taskId) => {
-      if (!currentUser) return;
+      if (!currentUser || window.isReadOnlyShareMode) return;
       await deleteDoc(doc(db, `users/${currentUser.uid}/tasks`, taskId));
     };
 
     window.dbSaveCategory = async (cat) => {
-      if (!currentUser) return;
+      if (!currentUser || window.isReadOnlyShareMode) return;
       await setDoc(doc(db, `users/${currentUser.uid}/categories`, cat.id), { 
         name: cat.name, 
         order: cat.order ?? 0 
@@ -414,7 +507,7 @@
     };
 
     window.dbBatchUpdateCategories = async (cats) => {
-      if (!currentUser) return;
+      if (!currentUser || window.isReadOnlyShareMode) return;
       for (let i = 0; i < cats.length; i++) {
         cats[i].order = i;
         await setDoc(doc(db, `users/${currentUser.uid}/categories`, cats[i].id), { order: i }, { merge: true });
@@ -422,14 +515,13 @@
     };
 
     window.dbDeleteCategory = async (catId) => {
-      if (!currentUser) return;
+      if (!currentUser || window.isReadOnlyShareMode) return;
       await deleteDoc(doc(db, `users/${currentUser.uid}/categories`, catId));
     };
   </script>
 
-  <!-- 主題、UI 與全卡片柔和色調邏輯 -->
+  <!-- 主題、UI、長按拖曳與快照分享互動邏輯 -->
   <script>
-    // 支援柔和紅、黃、綠三種全卡片底色與邊框
     const themes = {
       warm: {
         bodyBg: '#FBF9F5',
@@ -510,6 +602,7 @@
       body.style.backgroundColor = theme.bodyBg;
       body.className = `min-h-screen flex flex-col items-center p-3.5 sm:p-8 relative ${theme.textColor}`;
 
+      document.getElementById('shareBtn').className = `text-xs px-3 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm ${theme.subBtn}`;
       document.getElementById('settingsBtn').className = `p-2 rounded-xl border opacity-80 hover:opacity-100 transition flex items-center justify-center ${theme.subBtn}`;
       document.getElementById('authBtn').className = `text-xs px-2.5 py-1.5 rounded-xl border opacity-80 hover:opacity-100 transition ${theme.subBtn}`;
 
@@ -530,6 +623,9 @@
       document.getElementById('submitTaskBtn').className = `px-5 py-2.5 rounded-xl text-sm font-semibold transition ${theme.primaryBtn}`;
 
       document.getElementById('settingsModalBox').className = `max-w-md w-full rounded-3xl p-6 space-y-5 border shadow-2xl ${theme.modalBg}`;
+      document.getElementById('shareResultBox').className = `max-w-md w-full rounded-3xl p-6 space-y-4 border shadow-2xl ${theme.modalBg}`;
+      document.getElementById('copyShareBtn').className = `px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${theme.primaryBtn}`;
+
       document.getElementById('praiseToast').className = `fixed bottom-6 z-50 transition-all duration-300 transform translate-y-20 opacity-0 pointer-events-none flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl border ${theme.toast}`;
       document.getElementById('praiseModalBox').className = `max-w-md w-full rounded-2xl p-6 space-y-4 border shadow-2xl ${theme.modalBg}`;
       document.getElementById('newPraiseIcon').className = `w-12 text-center text-sm px-2 py-2 border rounded-xl focus:outline-none ${theme.inputBg}`;
@@ -551,7 +647,85 @@
       render();
     }
 
-    // Setting Modal 控制
+    // 快照分享邏輯
+    async function handleShareCurrentList() {
+      const currentListTasks = (currentTab === 'all' 
+        ? tasks 
+        : tasks.filter(t => t.listId === currentTab));
+
+      if (currentListTasks.length === 0) {
+        alert("當前清單未有任何待辦或已完成事項，無法生成分享。");
+        return;
+      }
+
+      const activeCat = categories.find(c => c.id === currentTab);
+      const listTitle = currentTab === 'all' ? '全部工作' : (activeCat ? activeCat.name : '自訂清單');
+      
+      const now = new Date();
+      const sharedAt = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+      const shareBtn = document.getElementById('shareBtn');
+      shareBtn.innerText = '⏳ 生成中...';
+
+      try {
+        const snapshotData = {
+          listTitle: listTitle,
+          tabId: currentTab,
+          categories: categories,
+          tasks: currentListTasks,
+          sharedAt: sharedAt
+        };
+
+        let snapId;
+        if (window.dbCreateSnapshot) {
+          snapId = await window.dbCreateSnapshot(snapshotData);
+        } else {
+          snapId = 'local_' + Date.now();
+        }
+
+        const shareUrl = `${window.location.origin}${window.location.pathname}?share=${snapId}`;
+
+        // 優先嘗試調用 iOS / 手機原生分享選單
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: `To-Do 快照：${listTitle}`,
+              text: `這是 ${listTitle} 的最新待辦任務快照（發布於 ${sharedAt}）：`,
+              url: shareUrl
+            });
+            shareBtn.innerHTML = '<span>📤</span><span>分享</span>';
+            return;
+          } catch (e) {
+            // 用戶取消或不支援則 fallback 至彈窗
+          }
+        }
+
+        // 彈出連結複製彈窗
+        document.getElementById('shareUrlInput').value = shareUrl;
+        document.getElementById('shareResultModal').classList.remove('hidden');
+        document.getElementById('shareResultModal').classList.add('flex');
+      } catch (err) {
+        alert("生成分享連結失敗: " + err.message);
+      } finally {
+        shareBtn.innerHTML = '<span>📤</span><span>分享</span>';
+      }
+    }
+
+    function copyShareUrl() {
+      const input = document.getElementById('shareUrlInput');
+      input.select();
+      input.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(input.value);
+      const copyBtn = document.getElementById('copyShareBtn');
+      copyBtn.innerText = '已複製 ✔';
+      setTimeout(() => { copyBtn.innerText = '複製'; }, 2000);
+    }
+
+    function closeShareResultModal() {
+      document.getElementById('shareResultModal').classList.add('hidden');
+      document.getElementById('shareResultModal').classList.remove('flex');
+    }
+
     function openSettingsModal() {
       document.getElementById('settingsModal').classList.remove('hidden');
       document.getElementById('settingsModal').classList.add('flex');
@@ -569,7 +743,6 @@
       promptBatchDelete();
     }
 
-    // 鼓勵庫
     const defaultPraises = [
       { icon: '✨', text: '搞掂一單！今日又進步咗少少。' },
       { icon: '👏', text: '做得好！專注力滿分！' },
@@ -676,7 +849,6 @@
     let longPressTimer = null;
     let isDraggingTab = false;
 
-    // 清單 Tabs 渲染（放大一倍尺寸）
     function renderTabs() {
       const theme = themes[currentThemeKey];
       const fixedContainer = document.getElementById('fixedTabContainer');
@@ -687,14 +859,12 @@
       sortableContainer.innerHTML = '';
       select.innerHTML = '';
 
-      // 固定「全部工作」Tab (大號按鈕)
       const allBtn = document.createElement('button');
       allBtn.className = `px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 ${currentTab === 'all' ? theme.activeTab : theme.inactiveTab}`;
       allBtn.innerText = '📋 全部工作';
       allBtn.onclick = () => switchTab('all');
       fixedContainer.appendChild(allBtn);
 
-      // 各自訂 Tab (大號按鈕)
       categories.forEach((cat) => {
         const isCurrent = currentTab === cat.id;
         const tab = document.createElement('div');
@@ -702,34 +872,36 @@
         tab.className = `group flex items-center gap-1.5 px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 cursor-pointer select-none active:scale-95 ${isCurrent ? theme.activeTab : theme.inactiveTab}`;
         tab.innerHTML = `<span>${cat.name}</span>`;
 
-        tab.addEventListener('touchstart', () => {
-          isDraggingTab = false;
-          longPressTimer = setTimeout(() => {
-            if (!isDraggingTab) {
-              if (navigator.vibrate) navigator.vibrate(40);
-              openTabActionModal(cat.id, cat.name);
-            }
-          }, 600);
-        }, { passive: true });
+        if (!window.isReadOnlyShareMode) {
+          tab.addEventListener('touchstart', () => {
+            isDraggingTab = false;
+            longPressTimer = setTimeout(() => {
+              if (!isDraggingTab) {
+                if (navigator.vibrate) navigator.vibrate(40);
+                openTabActionModal(cat.id, cat.name);
+              }
+            }, 600);
+          }, { passive: true });
 
-        tab.addEventListener('touchmove', () => {
-          isDraggingTab = true;
-          if (longPressTimer) clearTimeout(longPressTimer);
-        });
+          tab.addEventListener('touchmove', () => {
+            isDraggingTab = true;
+            if (longPressTimer) clearTimeout(longPressTimer);
+          });
 
-        tab.addEventListener('touchend', () => {
-          if (longPressTimer) clearTimeout(longPressTimer);
-        });
+          tab.addEventListener('touchend', () => {
+            if (longPressTimer) clearTimeout(longPressTimer);
+          });
+
+          tab.ondblclick = (e) => {
+            e.stopPropagation();
+            openTabActionModal(cat.id, cat.name);
+          };
+        }
 
         tab.onclick = () => {
           if (!isDraggingTab) {
             switchTab(cat.id);
           }
-        };
-
-        tab.ondblclick = (e) => {
-          e.stopPropagation();
-          openTabActionModal(cat.id, cat.name);
         };
 
         sortableContainer.appendChild(tab);
@@ -741,33 +913,36 @@
         select.appendChild(opt);
       });
 
-      if (sortableTabsInstance) {
-        sortableTabsInstance.destroy();
-      }
-      sortableTabsInstance = new Sortable(sortableContainer, {
-        animation: 200,
-        delay: 250,
-        delayOnTouchOnly: true,
-        touchStartThreshold: 3,
-        ghostClass: 'sortable-ghost',
-        chosenClass: 'sortable-chosen',
-        onStart: () => {
-          isDraggingTab = true;
-          if (longPressTimer) clearTimeout(longPressTimer);
-          if (navigator.vibrate) navigator.vibrate(20);
-        },
-        onEnd: () => {
-          setTimeout(() => { isDraggingTab = false; }, 100);
-          const newOrderIds = Array.from(sortableContainer.children).map(el => el.getAttribute('data-id'));
-          categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
-          if (window.dbBatchUpdateCategories) {
-            window.dbBatchUpdateCategories(categories);
-          }
+      if (!window.isReadOnlyShareMode) {
+        if (sortableTabsInstance) {
+          sortableTabsInstance.destroy();
         }
-      });
+        sortableTabsInstance = new Sortable(sortableContainer, {
+          animation: 200,
+          delay: 250,
+          delayOnTouchOnly: true,
+          touchStartThreshold: 3,
+          ghostClass: 'sortable-ghost',
+          chosenClass: 'sortable-chosen',
+          onStart: () => {
+            isDraggingTab = true;
+            if (longPressTimer) clearTimeout(longPressTimer);
+            if (navigator.vibrate) navigator.vibrate(20);
+          },
+          onEnd: () => {
+            setTimeout(() => { isDraggingTab = false; }, 100);
+            const newOrderIds = Array.from(sortableContainer.children).map(el => el.getAttribute('data-id'));
+            categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
+            if (window.dbBatchUpdateCategories) {
+              window.dbBatchUpdateCategories(categories);
+            }
+          }
+        });
+      }
     }
 
     function openTabActionModal(catId, catName) {
+      if (window.isReadOnlyShareMode) return;
       activeLongPressCatId = catId;
       document.getElementById('tabActionTitle').innerText = `清單：${catName}`;
       const modal = document.getElementById('tabActionModal');
@@ -803,6 +978,7 @@
     }
 
     function renameCategory(catId) {
+      if (window.isReadOnlyShareMode) return;
       const cat = categories.find(c => c.id === catId);
       if (!cat) return;
       const newName = prompt(`請輸入清單「${cat.name}」的新名稱：`, cat.name);
@@ -815,6 +991,7 @@
     }
 
     function deleteCategory(catId) {
+      if (window.isReadOnlyShareMode) return;
       const cat = categories.find(c => c.id === catId);
       if (!cat) return;
 
@@ -835,6 +1012,7 @@
     }
 
     function promptAddNewList() {
+      if (window.isReadOnlyShareMode) return;
       const name = prompt('請輸入新清單名稱：');
       if (!name || !name.trim()) return;
       const newId = 'cat_' + Date.now();
@@ -844,7 +1022,6 @@
       switchTab(newId);
     }
 
-    // 渲染任務列表：放大尺寸、移除文字優先標籤、整條染上柔和紅/黃/綠
     function render() {
       const theme = themes[currentThemeKey];
       const activeList = document.getElementById('activeList');
@@ -862,20 +1039,18 @@
       document.getElementById('activeCount').innerText = activeTasks.length;
       document.getElementById('completedCount').innerText = completedTasks.length;
 
-      // 渲染待辦 Task（整條染色 + 加大 padding）
       activeTasks.forEach((task, index) => {
         const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
         const priorityColorClass = theme.priorityCards[task.priority] || theme.priorityCards.Medium;
 
         const li = document.createElement('li');
         li.setAttribute('data-task-id', task.id);
-        // 加大卡片空間：p-4 sm:p-5，圓潤卡片，帶有整條柔和底色與邊框
         li.className = `group flex items-center justify-between p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer select-none shadow-sm hover:shadow ${priorityColorClass}`;
 
         li.innerHTML = `
           <div class="flex items-center gap-3.5 min-w-0 flex-1" onclick="showDetail('${task.id}')">
             <span class="font-mono text-sm font-semibold opacity-40 w-7 flex-shrink-0">#${index + 1}</span>
-            <button type="button" onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 transition active:scale-90">
+            <button type="button" ${window.isReadOnlyShareMode ? 'disabled' : ''} onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 transition active:scale-90 ${window.isReadOnlyShareMode ? 'cursor-default' : ''}">
               <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition ${theme.accentCheck}">
               </div>
             </button>
@@ -893,21 +1068,22 @@
         activeList.appendChild(li);
       });
 
-      new Sortable(activeList, {
-        animation: 150,
-        delay: 200,
-        delayOnTouchOnly: true,
-        ghostClass: 'sortable-ghost',
-        onEnd: (evt) => {
-          const moved = activeTasks.splice(evt.oldIndex, 1)[0];
-          activeTasks.splice(evt.newIndex, 0, moved);
-          currentSort = 'manual';
-          document.getElementById('sortModeDesc').innerText = '當前：手動排序中';
-          updateTasksOrder(activeTasks);
-        }
-      });
+      if (!window.isReadOnlyShareMode) {
+        new Sortable(activeList, {
+          animation: 150,
+          delay: 200,
+          delayOnTouchOnly: true,
+          ghostClass: 'sortable-ghost',
+          onEnd: (evt) => {
+            const moved = activeTasks.splice(evt.oldIndex, 1)[0];
+            activeTasks.splice(evt.newIndex, 0, moved);
+            currentSort = 'manual';
+            document.getElementById('sortModeDesc').innerText = '當前：手動排序中';
+            updateTasksOrder(activeTasks);
+          }
+        });
+      }
 
-      // 渲染已完成任務（加大卡片空間）
       const sortedCompleted = completedTasks.slice().reverse();
       sortedCompleted.forEach((task, index) => {
         const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
@@ -918,7 +1094,7 @@
         li.innerHTML = `
           <div class="flex items-center gap-3 min-w-0 flex-1">
             <span class="font-mono text-xs sm:text-sm font-semibold opacity-40 w-8 flex-shrink-0">#C${index + 1}</span>
-            <button type="button" onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 active:scale-90 transition">
+            <button type="button" ${window.isReadOnlyShareMode ? 'disabled' : ''} onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 active:scale-90 transition ${window.isReadOnlyShareMode ? 'cursor-default' : ''}">
               <div class="w-6 h-6 rounded-lg flex items-center justify-center shadow-sm ${theme.checkedBg}">
                 <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
               </div>
@@ -935,6 +1111,7 @@
     }
 
     function toggleTask(id) {
+      if (window.isReadOnlyShareMode) return;
       const task = tasks.find(t => t.id === id);
       if (!task) return;
       task.isCompleted = !task.isCompleted;
@@ -950,6 +1127,7 @@
     }
 
     function addTask() {
+      if (window.isReadOnlyShareMode) return;
       const title = document.getElementById('taskInput').value.trim();
       if (!title) return;
       const priority = document.getElementById('taskPriority').value;
@@ -1005,6 +1183,7 @@
     }
 
     function promptBatchDelete() {
+      if (window.isReadOnlyShareMode) return;
       const filteredTasks = currentTab === 'all' 
         ? tasks 
         : tasks.filter(t => t.listId === currentTab);
@@ -1095,6 +1274,15 @@
         editListSelect.appendChild(opt);
       });
 
+      // 唯讀快照模式下隱藏修改與刪除按鈕
+      if (window.isReadOnlyShareMode) {
+        document.getElementById('editToggleBtn').classList.add('hidden');
+        document.getElementById('modalDeleteBtn').classList.add('hidden');
+      } else {
+        document.getElementById('editToggleBtn').classList.remove('hidden');
+        document.getElementById('modalDeleteBtn').classList.remove('hidden');
+      }
+
       renderModalState();
 
       document.getElementById('detailModal').classList.remove('hidden');
@@ -1112,6 +1300,7 @@
     }
 
     function toggleEditMode() {
+      if (window.isReadOnlyShareMode) return;
       isEditing = !isEditing;
       renderModalState();
     }
@@ -1144,6 +1333,7 @@
     }
 
     function saveTaskEdit() {
+      if (window.isReadOnlyShareMode) return;
       const task = tasks.find(t => t.id === currentViewingTaskId);
       if (!task) return;
 
@@ -1167,7 +1357,7 @@
     }
 
     function deleteCurrentTask() {
-      if (!currentViewingTaskId) return;
+      if (window.isReadOnlyShareMode || !currentViewingTaskId) return;
       const task = tasks.find(t => t.id === currentViewingTaskId);
       if (!task) return;
 
