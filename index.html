@@ -4,19 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   
-  <!-- iOS PWA 設定 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="To-Do List" />
   <link rel="apple-touch-icon" href="Icon_180x180.png" />
   <link rel="icon" type="image/png" href="Icon.png" />
 
-  <!-- 內嵌 PWA Manifest -->
   <link rel="manifest" href='data:application/manifest+json;utf-8,%7B%22name%22%3A%22To-Do%20List%22%2C%22short_name%22%3A%22To-Do%22%2C%22start_url%22%3A%22.%2Findex.html%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FBF9F5%22%2C%22theme_color%22%3A%22%23FBF9F5%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22Icon.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22Icon_180x180.png%22%2C%22sizes%22%3A%22180x180%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D' />
 
   <title>To-Do List</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入專門支援 iOS 觸控拖曳嘅 SortableJS -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -30,6 +31,15 @@
     }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .sortable-ghost {
+      opacity: 0.3;
+      transform: scale(0.95);
+    }
+    .sortable-chosen {
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+      transform: scale(1.05);
+      z-index: 99;
+    }
   </style>
 </head>
 <body id="appBody" class="min-h-screen flex flex-col items-center p-3 sm:p-8 relative">
@@ -54,7 +64,6 @@
         </div>
       </div>
       
-      <!-- 功能按鈕列 -->
       <div class="flex items-center justify-center gap-2 flex-wrap w-full">
         <select id="themeSelector" onchange="changeTheme(this.value)" class="px-2.5 py-1.5 rounded-xl border text-xs font-medium focus:outline-none cursor-pointer">
           <option value="warm">📜 溫暖紙感</option>
@@ -73,9 +82,10 @@
       </div>
     </header>
 
-    <!-- 清單分類切換欄 (Tabs) 支援拖曳排序與長按選單 -->
+    <!-- 清單分類切換欄 (iOS 支援直接長按拖曳換位) -->
     <section class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-      <div id="listTabsContainer" class="flex items-center gap-2 flex-nowrap"></div>
+      <div id="fixedTabContainer" class="flex-shrink-0"></div>
+      <div id="sortableTabsContainer" class="flex items-center gap-2 flex-nowrap"></div>
       <button onclick="promptAddNewList()" id="addListBtn" class="px-3.5 py-1.5 rounded-xl border border-dashed text-xs font-medium whitespace-nowrap transition flex-shrink-0">
         ＋ 新增清單
       </button>
@@ -367,7 +377,7 @@
     };
   </script>
 
-  <!-- 主題、UI 與長按拖曳互動邏輯 -->
+  <!-- 主題、UI 與雙端觸控拖曳邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -379,7 +389,7 @@
         inputBg: 'bg-stone-50 border-stone-200 text-stone-800',
         primaryBtn: 'bg-stone-800 text-stone-50 hover:bg-stone-700',
         subBtn: 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50',
-        activeTab: 'bg-stone-800 text-white',
+        activeTab: 'bg-stone-800 text-white shadow-sm',
         inactiveTab: 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50',
         toast: 'bg-stone-800 text-stone-100 border-stone-700',
         modalBg: 'bg-white border-stone-200 text-stone-800',
@@ -423,7 +433,7 @@
         inputBg: 'bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-zinc-600',
         primaryBtn: 'bg-zinc-100 text-zinc-950 hover:bg-zinc-200 font-semibold',
         subBtn: 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800',
-        activeTab: 'bg-zinc-100 text-zinc-950 font-bold',
+        activeTab: 'bg-zinc-100 text-zinc-950 font-bold shadow-sm',
         inactiveTab: 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800',
         toast: 'bg-zinc-900 text-zinc-100 border-zinc-700',
         modalBg: 'bg-zinc-900 border-zinc-800 text-zinc-100',
@@ -593,86 +603,69 @@
     let isEditing = false;
     let tasks = [];
     let currentSort = 'deadline';
-    let draggedIndex = null;
-    let draggedCategoryIndex = null;
+    let sortableTabsInstance = null;
 
-    // 長按（Hold）管理邏輯
     let activeLongPressCatId = null;
     let longPressTimer = null;
-    let isLongPressTriggered = false;
+    let isDraggingTab = false;
 
     function renderTabs() {
       const theme = themes[currentThemeKey];
-      const container = document.getElementById('listTabsContainer');
+      const fixedContainer = document.getElementById('fixedTabContainer');
+      const sortableContainer = document.getElementById('sortableTabsContainer');
       const select = document.getElementById('taskTargetList');
-      container.innerHTML = '';
+      
+      fixedContainer.innerHTML = '';
+      sortableContainer.innerHTML = '';
       select.innerHTML = '';
 
-      // 1. 固定不可拖曳的「全部工作」Tab
+      // 1. 固定不可換位的「全部工作」Tab
       const allBtn = document.createElement('button');
       allBtn.className = `px-3.5 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${currentTab === 'all' ? theme.activeTab : theme.inactiveTab}`;
       allBtn.innerText = '📋 全部工作 (All)';
       allBtn.onclick = () => switchTab('all');
-      container.appendChild(allBtn);
+      fixedContainer.appendChild(allBtn);
 
-      // 2. 支援自由拖曳換位與長按選單的各個自訂 Tab
-      categories.forEach((cat, index) => {
+      // 2. 可拖曳換位的各個自訂 Tab
+      categories.forEach((cat) => {
         const isCurrent = currentTab === cat.id;
         const tab = document.createElement('div');
-        tab.draggable = true;
+        tab.setAttribute('data-id', cat.id);
         tab.className = `group flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex-shrink-0 cursor-pointer select-none active:scale-95 ${isCurrent ? theme.activeTab : theme.inactiveTab}`;
-
         tab.innerHTML = `<span>${cat.name}</span>`;
 
-        // 桌面端拖曳換位
-        tab.ondragstart = (e) => {
-          draggedCategoryIndex = index;
-          e.dataTransfer.effectAllowed = 'move';
-        };
-        tab.ondragover = (e) => e.preventDefault();
-        tab.ondrop = (e) => {
-          e.preventDefault();
-          if (draggedCategoryIndex === null || draggedCategoryIndex === index) return;
-          const moved = categories.splice(draggedCategoryIndex, 1)[0];
-          categories.splice(index, 0, moved);
-          if (window.dbBatchUpdateCategories) {
-            window.dbBatchUpdateCategories(categories);
-          }
-          renderTabs();
-        };
-
-        // iOS / 手機觸控長按（Hold 500ms 彈出 Action Sheet）
-        tab.addEventListener('touchstart', (e) => {
-          isLongPressTriggered = false;
+        // iOS 長按呼出選單邏輯 (按住 0.6 秒且未拖動則觸發)
+        tab.addEventListener('touchstart', () => {
+          isDraggingTab = false;
           longPressTimer = setTimeout(() => {
-            isLongPressTriggered = true;
-            if (navigator.vibrate) navigator.vibrate(40); // 震動反饋
-            openTabActionModal(cat.id, cat.name);
-          }, 500);
+            if (!isDraggingTab) {
+              if (navigator.vibrate) navigator.vibrate(40);
+              openTabActionModal(cat.id, cat.name);
+            }
+          }, 600);
         }, { passive: true });
+
+        tab.addEventListener('touchmove', () => {
+          isDraggingTab = true;
+          if (longPressTimer) clearTimeout(longPressTimer);
+        });
 
         tab.addEventListener('touchend', () => {
           if (longPressTimer) clearTimeout(longPressTimer);
         });
 
-        tab.addEventListener('touchmove', () => {
-          if (longPressTimer) clearTimeout(longPressTimer);
-        });
-
-        // 點擊事件（若觸發了長按則不執行切換）
         tab.onclick = () => {
-          if (!isLongPressTriggered) {
+          if (!isDraggingTab) {
             switchTab(cat.id);
           }
         };
 
-        // 電腦端雙擊仍可改名
         tab.ondblclick = (e) => {
           e.stopPropagation();
           openTabActionModal(cat.id, cat.name);
         };
 
-        container.appendChild(tab);
+        sortableContainer.appendChild(tab);
 
         const opt = document.createElement('option');
         opt.value = cat.id;
@@ -680,9 +673,35 @@
         if (currentTab === cat.id) opt.selected = true;
         select.appendChild(opt);
       });
+
+      // 初始化或更新 SortableJS（極度流暢支援 iOS 觸控拖曳）
+      if (sortableTabsInstance) {
+        sortableTabsInstance.destroy();
+      }
+      sortableTabsInstance = new Sortable(sortableContainer, {
+        animation: 200,
+        delay: 250, // 手指按住 250ms 開始拖動調位（防誤觸滾動）
+        delayOnTouchOnly: true,
+        touchStartThreshold: 3,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onStart: () => {
+          isDraggingTab = true;
+          if (longPressTimer) clearTimeout(longPressTimer);
+          if (navigator.vibrate) navigator.vibrate(20);
+        },
+        onEnd: () => {
+          setTimeout(() => { isDraggingTab = false; }, 100);
+          // 重新整理陣列順序
+          const newOrderIds = Array.from(sortableContainer.children).map(el => el.getAttribute('data-id'));
+          categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
+          if (window.dbBatchUpdateCategories) {
+            window.dbBatchUpdateCategories(categories);
+          }
+        }
+      });
     }
 
-    // 長按選單開關
     function openTabActionModal(catId, catName) {
       activeLongPressCatId = catId;
       document.getElementById('tabActionTitle').innerText = `清單：${catName}`;
@@ -780,19 +799,8 @@
       activeTasks.forEach((task, index) => {
         const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
         const li = document.createElement('li');
-        li.draggable = true;
+        li.setAttribute('data-task-id', task.id);
         li.className = `group flex items-center justify-between p-3 sm:p-3.5 rounded-2xl transition cursor-pointer select-none ${theme.cardBg} ${theme.cardShadow}`;
-        
-        li.ondragstart = () => { draggedIndex = index; };
-        li.ondragover = (e) => e.preventDefault();
-        li.ondrop = () => {
-          if (draggedIndex === null || draggedIndex === index) return;
-          const moved = activeTasks.splice(draggedIndex, 1)[0];
-          activeTasks.splice(index, 0, moved);
-          currentSort = 'manual';
-          document.getElementById('sortBtn').innerText = '手動排序中';
-          updateTasksOrder(activeTasks);
-        };
 
         li.innerHTML = `
           <div class="flex items-center gap-2 min-w-0 flex-1" onclick="showDetail('${task.id}')">
@@ -814,6 +822,21 @@
           </div>
         `;
         activeList.appendChild(li);
+      });
+
+      // iOS Task 列表拖曳排序支援
+      new Sortable(activeList, {
+        animation: 150,
+        delay: 200,
+        delayOnTouchOnly: true,
+        ghostClass: 'sortable-ghost',
+        onEnd: (evt) => {
+          const moved = activeTasks.splice(evt.oldIndex, 1)[0];
+          activeTasks.splice(evt.newIndex, 0, moved);
+          currentSort = 'manual';
+          document.getElementById('sortBtn').innerText = '手動排序中';
+          updateTasksOrder(activeTasks);
+        }
       });
 
       completedTasks.slice().reverse().forEach((task) => {
