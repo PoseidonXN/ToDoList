@@ -15,7 +15,6 @@
   <title>To-Do List</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 引入專門支援 iOS 觸控拖曳嘅 SortableJS -->
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -82,7 +81,7 @@
       </div>
     </header>
 
-    <!-- 清單分類切換欄 (iOS 支援直接長按拖曳換位) -->
+    <!-- 清單分類切換欄 (Tabs) -->
     <section class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
       <div id="fixedTabContainer" class="flex-shrink-0"></div>
       <div id="sortableTabsContainer" class="flex items-center gap-2 flex-nowrap"></div>
@@ -123,7 +122,7 @@
     <section class="space-y-3">
       <div class="flex justify-between items-center px-1">
         <h2 id="activeHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">待辦事項 (<span id="activeCount">0</span>)</h2>
-        <span class="text-[11px] opacity-50">當前視圖動態編號</span>
+        <span class="text-[11px] opacity-50">動態編號 #1, #2...</span>
       </div>
       <ul id="activeList" class="space-y-2"></ul>
     </section>
@@ -132,7 +131,7 @@
     <section id="completedSection" class="space-y-3 pt-4 border-t">
       <div class="flex justify-between items-center px-1">
         <h2 id="completedHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">已完成任務 (<span id="completedCount">0</span>)</h2>
-        <span class="text-[11px] opacity-50">最新完成置頂</span>
+        <span class="text-[11px] opacity-50">動態編號 #C1, #C2...</span>
       </div>
       <ul id="completedList" class="space-y-2 opacity-85"></ul>
     </section>
@@ -229,7 +228,11 @@
         </div>
       </div>
 
+      <!-- 底部按鈕區：包含刪除按鈕與確認/關閉按鈕 -->
       <div class="pt-2 flex gap-2">
+        <button onclick="deleteCurrentTask()" class="py-2 px-3 border border-rose-300 bg-rose-50 text-rose-700 rounded-xl text-xs font-semibold hover:bg-rose-100 transition flex items-center justify-center gap-1 flex-shrink-0">
+          🗑️ 刪除
+        </button>
         <button id="modalActionBtn" onclick="closeModal()" class="w-full py-2 border rounded-xl text-xs font-semibold transition">
           關閉
         </button>
@@ -377,7 +380,7 @@
     };
   </script>
 
-  <!-- 主題、UI 與雙端觸控拖曳邏輯 -->
+  <!-- 主題、UI 與批次刪除增強邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -619,14 +622,12 @@
       sortableContainer.innerHTML = '';
       select.innerHTML = '';
 
-      // 1. 固定不可換位的「全部工作」Tab
       const allBtn = document.createElement('button');
       allBtn.className = `px-3.5 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${currentTab === 'all' ? theme.activeTab : theme.inactiveTab}`;
       allBtn.innerText = '📋 全部工作 (All)';
       allBtn.onclick = () => switchTab('all');
       fixedContainer.appendChild(allBtn);
 
-      // 2. 可拖曳換位的各個自訂 Tab
       categories.forEach((cat) => {
         const isCurrent = currentTab === cat.id;
         const tab = document.createElement('div');
@@ -634,7 +635,6 @@
         tab.className = `group flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex-shrink-0 cursor-pointer select-none active:scale-95 ${isCurrent ? theme.activeTab : theme.inactiveTab}`;
         tab.innerHTML = `<span>${cat.name}</span>`;
 
-        // iOS 長按呼出選單邏輯 (按住 0.6 秒且未拖動則觸發)
         tab.addEventListener('touchstart', () => {
           isDraggingTab = false;
           longPressTimer = setTimeout(() => {
@@ -674,13 +674,12 @@
         select.appendChild(opt);
       });
 
-      // 初始化或更新 SortableJS（極度流暢支援 iOS 觸控拖曳）
       if (sortableTabsInstance) {
         sortableTabsInstance.destroy();
       }
       sortableTabsInstance = new Sortable(sortableContainer, {
         animation: 200,
-        delay: 250, // 手指按住 250ms 開始拖動調位（防誤觸滾動）
+        delay: 250,
         delayOnTouchOnly: true,
         touchStartThreshold: 3,
         ghostClass: 'sortable-ghost',
@@ -692,7 +691,6 @@
         },
         onEnd: () => {
           setTimeout(() => { isDraggingTab = false; }, 100);
-          // 重新整理陣列順序
           const newOrderIds = Array.from(sortableContainer.children).map(el => el.getAttribute('data-id'));
           categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
           if (window.dbBatchUpdateCategories) {
@@ -796,6 +794,7 @@
       document.getElementById('activeCount').innerText = activeTasks.length;
       document.getElementById('completedCount').innerText = completedTasks.length;
 
+      // 渲染待辦（Active Tasks）
       activeTasks.forEach((task, index) => {
         const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
         const li = document.createElement('li');
@@ -804,7 +803,7 @@
 
         li.innerHTML = `
           <div class="flex items-center gap-2 min-w-0 flex-1" onclick="showDetail('${task.id}')">
-            <span class="font-mono text-xs font-semibold opacity-40 w-5 flex-shrink-0">#${index + 1}</span>
+            <span class="font-mono text-xs font-semibold opacity-40 w-6 flex-shrink-0">#${index + 1}</span>
             <button type="button" onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1.5 -ml-1 flex-shrink-0 transition active:scale-90">
               <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition ${theme.accentCheck}">
               </div>
@@ -824,7 +823,6 @@
         activeList.appendChild(li);
       });
 
-      // iOS Task 列表拖曳排序支援
       new Sortable(activeList, {
         animation: 150,
         delay: 200,
@@ -839,7 +837,9 @@
         }
       });
 
-      completedTasks.slice().reverse().forEach((task) => {
+      // 渲染已完成（Completed Tasks），加上 #C1, #C2 序號
+      const sortedCompleted = completedTasks.slice().reverse();
+      sortedCompleted.forEach((task, index) => {
         const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
         const li = document.createElement('li');
         li.className = `flex items-center justify-between p-2.5 sm:p-3 rounded-2xl border transition cursor-pointer ${theme.modalBox}`;
@@ -847,6 +847,7 @@
 
         li.innerHTML = `
           <div class="flex items-center gap-2 min-w-0 flex-1">
+            <span class="font-mono text-xs font-semibold opacity-40 w-7 flex-shrink-0">#C${index + 1}</span>
             <button type="button" onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1.5 -ml-1 flex-shrink-0 active:scale-90 transition">
               <div class="w-6 h-6 rounded-lg flex items-center justify-center shadow-sm ${theme.checkedBg}">
                 <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
@@ -933,44 +934,74 @@
       render();
     }
 
+    // 支援待辦 (1-3) 與 已完成 (C1-C3) 的混合批次刪除
     function promptBatchDelete() {
-      const activeInView = (currentTab === 'all' 
+      const filteredTasks = currentTab === 'all' 
         ? tasks 
-        : tasks.filter(t => t.listId === currentTab)).filter(t => !t.isCompleted);
+        : tasks.filter(t => t.listId === currentTab);
 
-      const input = prompt(`請輸入要刪除的當前畫面動態編號 (1 至 ${activeInView.length}，例如：1-2, 4):`);
+      const activeInView = filteredTasks.filter(t => !t.isCompleted);
+      const completedInView = filteredTasks.filter(t => t.isCompleted).slice().reverse();
+
+      const promptText = `請輸入要刪除的任務編號：\n` +
+        `• 待辦任務例如：1-3, 5\n` +
+        `• 已完成任務例如：C1-C3, C5\n` +
+        `• 亦可混搭輸入，例如：1-2, C1-C5`;
+
+      const input = prompt(promptText);
       if (!input) return;
 
-      const indicesToDelete = new Set();
+      const activeIndices = new Set();
+      const completedIndices = new Set();
+
       const parts = input.split(',').map(s => s.trim());
       parts.forEach(part => {
-        if (part.includes('-')) {
-          const [start, end] = part.split('-').map(Number);
+        const isCompletedPart = part.toUpperCase().startsWith('C');
+        const cleanPart = isCompletedPart ? part.toUpperCase().replace(/C/g, '').trim() : part;
+
+        if (cleanPart.includes('-')) {
+          const [start, end] = cleanPart.split('-').map(Number);
           if (!isNaN(start) && !isNaN(end)) {
-            for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
-              if (i >= 1 && i <= activeInView.length) indicesToDelete.add(i - 1);
+            const min = Math.min(start, end);
+            const max = Math.max(start, end);
+            for (let i = min; i <= max; i++) {
+              if (isCompletedPart) {
+                if (i >= 1 && i <= completedInView.length) completedIndices.add(i - 1);
+              } else {
+                if (i >= 1 && i <= activeInView.length) activeIndices.add(i - 1);
+              }
             }
           }
         } else {
-          const num = Number(part);
-          if (!isNaN(num) && num >= 1 && num <= activeInView.length) {
-            indicesToDelete.add(num - 1);
+          const num = Number(cleanPart);
+          if (!isNaN(num)) {
+            if (isCompletedPart) {
+              if (num >= 1 && num <= completedInView.length) completedIndices.add(num - 1);
+            } else {
+              if (num >= 1 && num <= activeInView.length) activeIndices.add(num - 1);
+            }
           }
         }
       });
 
-      if (indicesToDelete.size === 0) {
-        alert("未找到符合編號的任務。");
+      const idsToRemove = [
+        ...Array.from(activeIndices).map(idx => activeInView[idx].id),
+        ...Array.from(completedIndices).map(idx => completedInView[idx].id)
+      ];
+
+      if (idsToRemove.length === 0) {
+        alert("未找到符合編號的任務，請確認序號是否正確。");
         return;
       }
 
-      const idsToRemove = Array.from(indicesToDelete).map(idx => activeInView[idx].id);
-      idsToRemove.forEach(id => {
-        if (window.dbDeleteTask) window.dbDeleteTask(id);
-      });
-      tasks = tasks.filter(t => !idsToRemove.includes(t.id));
-      render();
-      alert(`已將選取的編號任務移至回收站。`);
+      if (confirm(`確定要刪除這 ${idsToRemove.length} 個任務嗎？`)) {
+        idsToRemove.forEach(id => {
+          if (window.dbDeleteTask) window.dbDeleteTask(id);
+        });
+        tasks = tasks.filter(t => !idsToRemove.includes(t.id));
+        render();
+        alert(`已成功刪除 ${idsToRemove.length} 個任務。`);
+      }
     }
 
     function showDetail(id) {
@@ -1064,6 +1095,20 @@
       isEditing = false;
       renderModalState();
       applyCurrentSort();
+    }
+
+    // Modal 內的單獨刪除功能
+    function deleteCurrentTask() {
+      if (!currentViewingTaskId) return;
+      const task = tasks.find(t => t.id === currentViewingTaskId);
+      if (!task) return;
+
+      if (confirm(`確定要刪除「${task.title}」嗎？`)) {
+        if (window.dbDeleteTask) window.dbDeleteTask(currentViewingTaskId);
+        tasks = tasks.filter(t => t.id !== currentViewingTaskId);
+        closeModal();
+        render();
+      }
     }
 
     function closeModal() {
