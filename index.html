@@ -25,6 +25,8 @@
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       -webkit-tap-highlight-color: transparent;
       transition: background-color 0.25s ease, color 0.25s ease;
+      user-select: none;
+      -webkit-user-select: none;
     }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -71,7 +73,7 @@
       </div>
     </header>
 
-    <!-- 清單分類切換欄 (Tabs) -->
+    <!-- 清單分類切換欄 (Tabs) 支援拖曳排序與長按選單 -->
     <section class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
       <div id="listTabsContainer" class="flex items-center gap-2 flex-nowrap"></div>
       <button onclick="promptAddNewList()" id="addListBtn" class="px-3.5 py-1.5 rounded-xl border border-dashed text-xs font-medium whitespace-nowrap transition flex-shrink-0">
@@ -126,6 +128,24 @@
     </section>
 
   </main>
+
+  <!-- iOS 長按清單彈出的 Action Sheet Modal -->
+  <div id="tabActionModal" class="fixed inset-0 bg-stone-900/40 backdrop-blur-sm hidden items-end sm:items-center justify-center p-4 z-50 transition-opacity">
+    <div id="tabActionBox" class="w-full max-w-xs rounded-2xl p-4 space-y-3 border shadow-2xl">
+      <h3 id="tabActionTitle" class="text-sm font-bold text-center border-b pb-2">清單選項</h3>
+      <div class="space-y-2">
+        <button onclick="executeTabRename()" class="w-full py-2.5 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 hover:opacity-80 transition">
+          ✏️ 重新命名清單
+        </button>
+        <button onclick="executeTabDelete()" class="w-full py-2.5 px-3 rounded-xl border border-rose-300 bg-rose-50 text-rose-700 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-rose-100 transition">
+          🗑️ 刪除此清單
+        </button>
+      </div>
+      <button onclick="closeTabActionModal()" class="w-full py-2 rounded-xl border text-xs font-medium opacity-70 hover:opacity-100 transition">
+        取消
+      </button>
+    </div>
+  </div>
 
   <!-- 鼓勵讚賞管理 Modal -->
   <div id="praiseModal" class="fixed inset-0 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
@@ -229,7 +249,6 @@
       enableIndexedDbPersistence 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // 填入你圖片中的專屬配置
     const firebaseConfig = {
       apiKey: "AIzaSyD5woha0e3n2vc03u82hN5UPwXemgiZjWM",
       authDomain: "todolist-2aa90.firebaseapp.com",
@@ -244,7 +263,6 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // 啟用本地離線快取（離線照常讀寫）
     enableIndexedDbPersistence(db).catch(() => {});
     setPersistence(auth, browserLocalPersistence);
 
@@ -258,7 +276,6 @@
       if (user) {
         authBtn.innerText = '登出';
         authBtn.title = user.email;
-        // 記錄最後登入時間供 Admin Panel 統計
         setDoc(doc(db, `users/${user.uid}`), {
           email: user.email,
           displayName: user.displayName || '',
@@ -272,8 +289,8 @@
         if (unsubscribeCategories) unsubscribeCategories();
         tasks = [];
         categories = [
-          { id: 'cat_work', name: '工作教案' },
-          { id: 'cat_life', name: '日常待辦' }
+          { id: 'cat_work', name: '工作教案', order: 0 },
+          { id: 'cat_life', name: '日常待辦', order: 1 }
         ];
         renderTabs();
         render();
@@ -290,25 +307,26 @@
     };
 
     function bindFirestoreData(uid) {
-      // 1. 同步清單分類
       const catRef = collection(db, `users/${uid}/categories`);
       unsubscribeCategories = onSnapshot(catRef, (snap) => {
         if (!snap.empty) {
           categories = [];
-          snap.forEach(d => categories.push({ id: d.id, ...d.data() }));
+          snap.forEach(d => {
+            const data = d.data();
+            categories.push({ id: d.id, name: data.name, order: data.order ?? 999 });
+          });
+          categories.sort((a, b) => a.order - b.order);
         } else {
-          // 初始化預設分類
           const defaultCats = [
-            { id: 'cat_work', name: '工作教案' },
-            { id: 'cat_life', name: '日常待辦' }
+            { id: 'cat_work', name: '工作教案', order: 0 },
+            { id: 'cat_life', name: '日常待辦', order: 1 }
           ];
-          defaultCats.forEach(c => setDoc(doc(db, `users/${uid}/categories`, c.id), { name: c.name }));
+          defaultCats.forEach(c => setDoc(doc(db, `users/${uid}/categories`, c.id), c));
           categories = defaultCats;
         }
         renderTabs();
       });
 
-      // 2. 同步任務項目
       const taskRef = collection(db, `users/${uid}/tasks`);
       unsubscribeTasks = onSnapshot(taskRef, (snap) => {
         tasks = [];
@@ -317,7 +335,6 @@
       });
     }
 
-    // 暴露雲端存取介面
     window.dbSaveTask = async (task) => {
       if (!currentUser) return;
       await setDoc(doc(db, `users/${currentUser.uid}/tasks`, task.id), task, { merge: true });
@@ -330,7 +347,18 @@
 
     window.dbSaveCategory = async (cat) => {
       if (!currentUser) return;
-      await setDoc(doc(db, `users/${currentUser.uid}/categories`, cat.id), { name: cat.name });
+      await setDoc(doc(db, `users/${currentUser.uid}/categories`, cat.id), { 
+        name: cat.name, 
+        order: cat.order ?? 0 
+      }, { merge: true });
+    };
+
+    window.dbBatchUpdateCategories = async (cats) => {
+      if (!currentUser) return;
+      for (let i = 0; i < cats.length; i++) {
+        cats[i].order = i;
+        await setDoc(doc(db, `users/${currentUser.uid}/categories`, cats[i].id), { order: i }, { merge: true });
+      }
     };
 
     window.dbDeleteCategory = async (catId) => {
@@ -339,7 +367,7 @@
     };
   </script>
 
-  <!-- 主題、UI 與互動邏輯 -->
+  <!-- 主題、UI 與長按拖曳互動邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -459,6 +487,8 @@
       document.getElementById('editPrioritySelect').className = `w-full text-xs px-2.5 py-2 border rounded-xl focus:outline-none ${theme.inputBg}`;
       document.getElementById('editDueDateInput').className = `w-full text-xs px-2.5 py-2 border rounded-xl focus:outline-none ${theme.inputBg}`;
 
+      document.getElementById('tabActionBox').className = `w-full max-w-xs rounded-2xl p-4 space-y-3 border shadow-2xl ${theme.modalBg}`;
+
       renderTabs();
       render();
     }
@@ -554,8 +584,8 @@
     }
 
     let categories = [
-      { id: 'cat_work', name: '工作教案' },
-      { id: 'cat_life', name: '日常待辦' }
+      { id: 'cat_work', name: '工作教案', order: 0 },
+      { id: 'cat_life', name: '日常待辦', order: 1 }
     ];
 
     let currentTab = 'all';
@@ -564,6 +594,12 @@
     let tasks = [];
     let currentSort = 'deadline';
     let draggedIndex = null;
+    let draggedCategoryIndex = null;
+
+    // 長按（Hold）管理邏輯
+    let activeLongPressCatId = null;
+    let longPressTimer = null;
+    let isLongPressTriggered = false;
 
     function renderTabs() {
       const theme = themes[currentThemeKey];
@@ -572,36 +608,71 @@
       container.innerHTML = '';
       select.innerHTML = '';
 
+      // 1. 固定不可拖曳的「全部工作」Tab
       const allBtn = document.createElement('button');
       allBtn.className = `px-3.5 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex-shrink-0 ${currentTab === 'all' ? theme.activeTab : theme.inactiveTab}`;
       allBtn.innerText = '📋 全部工作 (All)';
       allBtn.onclick = () => switchTab('all');
       container.appendChild(allBtn);
 
-      categories.forEach(cat => {
+      // 2. 支援自由拖曳換位與長按選單的各個自訂 Tab
+      categories.forEach((cat, index) => {
         const isCurrent = currentTab === cat.id;
-        const tabWrapper = document.createElement('div');
-        tabWrapper.className = `group flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex-shrink-0 cursor-pointer ${isCurrent ? theme.activeTab : theme.inactiveTab}`;
+        const tab = document.createElement('div');
+        tab.draggable = true;
+        tab.className = `group flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition whitespace-nowrap flex-shrink-0 cursor-pointer select-none active:scale-95 ${isCurrent ? theme.activeTab : theme.inactiveTab}`;
 
-        tabWrapper.onclick = () => switchTab(cat.id);
-        tabWrapper.ondblclick = (e) => {
-          e.stopPropagation();
-          renameCategory(cat.id);
+        tab.innerHTML = `<span>${cat.name}</span>`;
+
+        // 桌面端拖曳換位
+        tab.ondragstart = (e) => {
+          draggedCategoryIndex = index;
+          e.dataTransfer.effectAllowed = 'move';
+        };
+        tab.ondragover = (e) => e.preventDefault();
+        tab.ondrop = (e) => {
+          e.preventDefault();
+          if (draggedCategoryIndex === null || draggedCategoryIndex === index) return;
+          const moved = categories.splice(draggedCategoryIndex, 1)[0];
+          categories.splice(index, 0, moved);
+          if (window.dbBatchUpdateCategories) {
+            window.dbBatchUpdateCategories(categories);
+          }
+          renderTabs();
         };
 
-        const nameSpan = document.createElement('span');
-        nameSpan.innerText = cat.name;
-        tabWrapper.appendChild(nameSpan);
+        // iOS / 手機觸控長按（Hold 500ms 彈出 Action Sheet）
+        tab.addEventListener('touchstart', (e) => {
+          isLongPressTriggered = false;
+          longPressTimer = setTimeout(() => {
+            isLongPressTriggered = true;
+            if (navigator.vibrate) navigator.vibrate(40); // 震動反饋
+            openTabActionModal(cat.id, cat.name);
+          }, 500);
+        }, { passive: true });
 
-        const actions = document.createElement('div');
-        actions.className = `flex items-center gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity`;
-        actions.innerHTML = `
-          <button title="修改名稱" onclick="event.stopPropagation(); renameCategory('${cat.id}')" class="p-0.5 rounded opacity-60 hover:opacity-100">✎</button>
-          <button title="刪除清單" onclick="event.stopPropagation(); deleteCategory('${cat.id}')" class="p-0.5 rounded opacity-60 hover:text-rose-500">×</button>
-        `;
-        tabWrapper.appendChild(actions);
+        tab.addEventListener('touchend', () => {
+          if (longPressTimer) clearTimeout(longPressTimer);
+        });
 
-        container.appendChild(tabWrapper);
+        tab.addEventListener('touchmove', () => {
+          if (longPressTimer) clearTimeout(longPressTimer);
+        });
+
+        // 點擊事件（若觸發了長按則不執行切換）
+        tab.onclick = () => {
+          if (!isLongPressTriggered) {
+            switchTab(cat.id);
+          }
+        };
+
+        // 電腦端雙擊仍可改名
+        tab.ondblclick = (e) => {
+          e.stopPropagation();
+          openTabActionModal(cat.id, cat.name);
+        };
+
+        container.appendChild(tab);
 
         const opt = document.createElement('option');
         opt.value = cat.id;
@@ -609,6 +680,36 @@
         if (currentTab === cat.id) opt.selected = true;
         select.appendChild(opt);
       });
+    }
+
+    // 長按選單開關
+    function openTabActionModal(catId, catName) {
+      activeLongPressCatId = catId;
+      document.getElementById('tabActionTitle').innerText = `清單：${catName}`;
+      const modal = document.getElementById('tabActionModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeTabActionModal() {
+      const modal = document.getElementById('tabActionModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      activeLongPressCatId = null;
+    }
+
+    function executeTabRename() {
+      const catId = activeLongPressCatId;
+      closeTabActionModal();
+      if (!catId) return;
+      renameCategory(catId);
+    }
+
+    function executeTabDelete() {
+      const catId = activeLongPressCatId;
+      closeTabActionModal();
+      if (!catId) return;
+      deleteCategory(catId);
     }
 
     function switchTab(tabId) {
@@ -653,7 +754,7 @@
       const name = prompt('請輸入新清單名稱：');
       if (!name || !name.trim()) return;
       const newId = 'cat_' + Date.now();
-      const newCat = { id: newId, name: name.trim() };
+      const newCat = { id: newId, name: name.trim(), order: categories.length };
       categories.push(newCat);
       if (window.dbSaveCategory) window.dbSaveCategory(newCat);
       switchTab(newId);
