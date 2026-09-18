@@ -31,15 +31,18 @@
     }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* 極低干擾的拖曳輔助樣式 */
     .sortable-ghost {
-      opacity: 0.3 !important;
-      transform: scale(0.98);
-      background-color: #cbd5e1 !important;
+      opacity: 0.25 !important;
+      transform: scale(0.96) !important;
+      border: 2px dashed #94a3b8 !important;
     }
-    .sortable-chosen {
-      box-shadow: 0 12px 28px rgba(0,0,0,0.18) !important;
-      transform: scale(1.02);
-      z-index: 99 !important;
+    .sortable-fallback {
+      opacity: 0.95 !important;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.2) !important;
+      transform: scale(1.02) !important;
+      z-index: 9999 !important;
     }
     .drag-handle {
       touch-action: none !important;
@@ -575,7 +578,7 @@
     };
   </script>
 
-  <!-- 主題、UI、調動次序修復與按鈕樣式核心邏輯 -->
+  <!-- 主題、UI、高靈敏拖曳與即時儲存邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -825,20 +828,22 @@
       }
     }
 
-    // 重點優化：加入 swapThreshold 與垂直吸附，解決拉動容易彈回原位的問題
+    // 核心優化：forceFallback 解決手機手勢死鎖，swapThreshold 0.1 實現輕輕一拉即插位
     function initSortableInstances() {
       destroySortableInstances();
 
       const tabsEl = document.getElementById('sortableTabsContainer');
       sortableTabsInstance = new Sortable(tabsEl, {
-        animation: 200,
+        animation: 150,
         delay: 0,
-        swapThreshold: 0.5,
+        swapThreshold: 0.3,
+        forceFallback: true, // 規避 iOS 原生拖曳 Bug
+        fallbackClass: 'sortable-fallback',
         ghostClass: 'sortable-ghost',
-        chosenClass: 'sortable-chosen',
         onEnd: () => {
           const newOrderIds = Array.from(tabsEl.children).map(el => el.getAttribute('data-id'));
           categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
+          // 放手即刻同步最新清單次序
           if (window.dbBatchUpdateCategories) {
             window.dbBatchUpdateCategories(categories);
           }
@@ -847,26 +852,29 @@
 
       const tasksEl = document.getElementById('activeList');
       sortableTasksInstance = new Sortable(tasksEl, {
-        animation: 220,
+        animation: 150,
         handle: '.drag-handle',
         direction: 'vertical',
-        swapThreshold: 0.3,          // 只需滑動超過 30% 即自動換位，不再苛求對齊
-        invertSwap: true,             // 雙向順暢推擠
-        fallbackTolerance: 3,         // 防誤觸與跳回
-        scroll: true,                 // 支援自動滾動
-        scrollSensitivity: 50,
-        scrollSpeed: 15,
+        swapThreshold: 0.1,          // 移過 10% 距離立即讓位，滑動極為敏感順暢
+        invertSwap: false,
+        forceFallback: true,         // 全面啟用自定義拖曳核心，手機絕不回彈
+        fallbackClass: 'sortable-fallback',
+        fallbackOnBody: true,
+        scroll: true,
+        scrollSensitivity: 80,
+        scrollSpeed: 20,
         ghostClass: 'sortable-ghost',
-        chosenClass: 'sortable-chosen',
         onEnd: (evt) => {
           const filteredTasks = currentTab === 'all' 
             ? tasks 
             : tasks.filter(t => t.listId === currentTab);
           const activeTasks = filteredTasks.filter(t => !t.isCompleted);
 
+          // 重新定位陣列
           const moved = activeTasks.splice(evt.oldIndex, 1)[0];
           activeTasks.splice(evt.newIndex, 0, moved);
 
+          // 放手即刻永久同步進度，失敗亦不會丟失進度
           updateTasksOrder(activeTasks);
           if (window.dbBatchUpdateTasksOrder) {
             window.dbBatchUpdateTasksOrder(activeTasks);
@@ -1022,7 +1030,7 @@
         const cardClasses = isReorderMode ? 'ring-1 ring-amber-300/80 shadow-xs' : 'cursor-pointer hover:shadow';
         li.className = `group flex items-center justify-between p-3.5 sm:p-5 rounded-2xl border transition-all select-none shadow-sm ${priorityColorClass} ${cardClasses}`;
 
-        // 重點修復：置頂、置底按鈕明確設定純白背景、深色字體與外框，杜絕黑底問題
+        // 明確固定實體白底深色文字按鈕
         const rightActionSection = isReorderMode 
           ? `
             <div class="flex items-center gap-1.5 flex-shrink-0" onclick="event.stopPropagation()">
@@ -1040,8 +1048,9 @@
             </div>
           `;
 
+        // 加大觸控手柄面積
         const leftHandleSection = isReorderMode
-          ? `<div class="drag-handle w-10 h-10 -ml-1 flex items-center justify-center rounded-xl bg-black/10 dark:bg-white/20 text-lg font-bold opacity-90 cursor-grab active:cursor-grabbing flex-shrink-0" title="按住拖曳調位">⠿</div>`
+          ? `<div class="drag-handle w-11 h-11 -ml-1.5 flex items-center justify-center rounded-xl bg-black/10 dark:bg-white/20 text-xl font-bold opacity-90 cursor-grab active:cursor-grabbing flex-shrink-0 select-none" title="按住拖曳調位">⠿</div>`
           : `<span class="font-mono text-sm font-semibold opacity-40 w-7 flex-shrink-0">#${index + 1}</span>`;
 
         li.innerHTML = `
