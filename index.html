@@ -40,8 +40,16 @@
       transform: scale(1.02);
       z-index: 99;
     }
-    .reorder-active-item {
+    .drag-handle {
+      touch-action: none !important;
       cursor: grab !important;
+    }
+    .drag-handle:active {
+      cursor: grabbing !important;
+    }
+    .reorder-active-tab {
+      cursor: grab !important;
+      touch-action: none !important;
       animation: gentle-wobble 1.2s infinite ease-in-out;
     }
     @keyframes gentle-wobble {
@@ -96,7 +104,7 @@
       </div>
     </header>
 
-    <!-- 清單分類切換欄：加入電腦版左右箭咀與滑鼠拖拉滾動 -->
+    <!-- 清單分類切換欄 -->
     <section id="tabsSection" class="relative flex items-center group/tabbar py-1">
       <button onclick="scrollTabs(-200)" id="tabScrollLeftBtn" class="hidden sm:flex absolute left-0 z-10 p-2 rounded-xl border bg-white/90 dark:bg-stone-900/90 shadow-md opacity-0 group-hover/tabbar:opacity-100 transition">
         ◀
@@ -117,7 +125,7 @@
 
     <!-- 列表模式容器 -->
     <div id="listViewContainer" class="space-y-6">
-      <!-- 新增 Task 輸入卡片（調動模式下會暫時變暗不可用） -->
+      <!-- 新增 Task 輸入卡片 -->
       <section id="inputCard" class="p-5 rounded-2xl border space-y-3.5 transition-all shadow-sm">
         <div class="flex gap-2">
           <input id="taskInput" type="text" placeholder="新增待辦事項..." class="flex-1 px-3.5 py-2.5 text-base rounded-xl border focus:outline-none transition" />
@@ -133,9 +141,10 @@
           <div class="flex items-center gap-1.5">
             <span class="opacity-60 flex-shrink-0">優先程度:</span>
             <select id="taskPriority" class="w-full border rounded-lg px-2.5 py-2 focus:outline-none">
-              <option value="High">高 (柔和紅)</option>
-              <option value="Medium" selected>中 (柔和黃)</option>
-              <option value="Low">低 (柔和綠)</option>
+              <option value="" selected>&nbsp;</option>
+              <option value="Low">低</option>
+              <option value="Medium">中</option>
+              <option value="High">高</option>
             </select>
           </div>
           <div class="flex items-center gap-1.5">
@@ -145,7 +154,7 @@
         </div>
       </section>
 
-      <!-- 進行中列表：抬頭右側加入「更改次序」掣 -->
+      <!-- 進行中列表 -->
       <section class="space-y-3.5" id="activeSection">
         <div class="flex justify-between items-center px-1">
           <h2 id="activeHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">待辦事項 (<span id="activeCount">0</span>)</h2>
@@ -354,9 +363,10 @@
           <div>
             <label class="block text-[11px] font-semibold opacity-70 mb-1">優先程度</label>
             <select id="editPrioritySelect" class="w-full text-xs px-2.5 py-2 border rounded-xl focus:outline-none">
-              <option value="High">高 (柔和紅)</option>
-              <option value="Medium">中 (柔和黃)</option>
-              <option value="Low">低 (柔和綠)</option>
+              <option value="">&nbsp;</option>
+              <option value="Low">低</option>
+              <option value="Medium">中</option>
+              <option value="High">高</option>
             </select>
           </div>
           <div>
@@ -394,7 +404,7 @@
       collection, 
       doc, 
       setDoc, 
-      getDoc,
+      getDoc, 
       deleteDoc, 
       onSnapshot,
       enableIndexedDbPersistence 
@@ -564,7 +574,7 @@
     };
   </script>
 
-  <!-- 主題、UI、調動次序模式與橫向滑動互動邏輯 -->
+  <!-- 主題、UI、調動次序模式與空白淺藍優先度邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -581,9 +591,11 @@
         modalBg: 'bg-white border-stone-200 text-stone-800',
         modalBox: 'bg-stone-50 border-stone-100 text-stone-600',
         priorityCards: {
-          High:   'bg-rose-50/85 border-rose-200/90 text-stone-800 hover:border-rose-300',
-          Medium: 'bg-amber-50/85 border-amber-200/90 text-stone-800 hover:border-amber-300',
-          Low:    'bg-emerald-50/75 border-emerald-200/90 text-stone-800 hover:border-emerald-300'
+          "":       'bg-sky-50/85 border-sky-200/90 text-stone-800 hover:border-sky-300',
+          "None":   'bg-sky-50/85 border-sky-200/90 text-stone-800 hover:border-sky-300',
+          "High":   'bg-rose-50/85 border-rose-200/90 text-stone-800 hover:border-rose-300',
+          "Medium": 'bg-amber-50/85 border-amber-200/90 text-stone-800 hover:border-amber-300',
+          "Low":    'bg-emerald-50/75 border-emerald-200/90 text-stone-800 hover:border-emerald-300'
         },
         accentCheck: 'border-stone-400/80 bg-white/80 hover:border-stone-700',
         checkedBg: 'bg-stone-700 text-stone-50',
@@ -605,9 +617,11 @@
         modalBg: 'bg-white border-neutral-200 text-neutral-900',
         modalBox: 'bg-neutral-50 border-neutral-200/60 text-neutral-600',
         priorityCards: {
-          High:   'bg-red-50/90 border-red-200 text-neutral-900 hover:border-red-300',
-          Medium: 'bg-amber-50/90 border-amber-200 text-neutral-900 hover:border-amber-300',
-          Low:    'bg-emerald-50/85 border-emerald-200 text-neutral-900 hover:border-emerald-300'
+          "":       'bg-sky-50/90 border-sky-200 text-neutral-900 hover:border-sky-300',
+          "None":   'bg-sky-50/90 border-sky-200 text-neutral-900 hover:border-sky-300',
+          "High":   'bg-red-50/90 border-red-200 text-neutral-900 hover:border-red-300',
+          "Medium": 'bg-amber-50/90 border-amber-200 text-neutral-900 hover:border-amber-300',
+          "Low":    'bg-emerald-50/85 border-emerald-200 text-neutral-900 hover:border-emerald-300'
         },
         accentCheck: 'border-neutral-400/70 bg-white hover:border-blue-500',
         checkedBg: 'bg-blue-600 text-white',
@@ -629,9 +643,11 @@
         modalBg: 'bg-zinc-900 border-zinc-800 text-zinc-100',
         modalBox: 'bg-zinc-950 border-zinc-800 text-zinc-400',
         priorityCards: {
-          High:   'bg-rose-950/40 border-rose-900/60 text-rose-100 hover:border-rose-700/80',
-          Medium: 'bg-amber-950/35 border-amber-900/50 text-amber-100 hover:border-amber-700/70',
-          Low:    'bg-emerald-950/35 border-emerald-900/50 text-emerald-100 hover:border-emerald-700/70'
+          "":       'bg-sky-950/40 border-sky-900/60 text-sky-100 hover:border-sky-700/80',
+          "None":   'bg-sky-950/40 border-sky-900/60 text-sky-100 hover:border-sky-700/80',
+          "High":   'bg-rose-950/40 border-rose-900/60 text-rose-100 hover:border-rose-700/80',
+          "Medium": 'bg-amber-950/35 border-amber-900/50 text-amber-100 hover:border-amber-700/70',
+          "Low":    'bg-emerald-950/35 border-emerald-900/50 text-emerald-100 hover:border-emerald-700/70'
         },
         accentCheck: 'border-zinc-600 bg-zinc-950 hover:border-zinc-300',
         checkedBg: 'bg-zinc-200 text-zinc-950 font-bold',
@@ -719,7 +735,6 @@
     let tasks = [];
     let currentSort = 'deadline';
 
-    // 調動模式開關
     let isReorderMode = false;
     let sortableTabsInstance = null;
     let sortableTasksInstance = null;
@@ -730,13 +745,11 @@
     let isCalendarMode = false;
     let calendarDate = new Date();
 
-    // 電腦版滑鼠 Drag-to-Scroll (抓取橫向滾動) 實現
     const scrollWrapper = document.getElementById('tabsScrollWrapper');
     let isMouseDown = false;
     let startX, scrollLeft;
 
     scrollWrapper.addEventListener('mousedown', (e) => {
-      // 若點擊的是 Tab 按鈕本身則不干擾調動模式
       if (isReorderMode) return;
       isMouseDown = true;
       startX = e.pageX - scrollWrapper.offsetLeft;
@@ -749,7 +762,7 @@
       if (!isMouseDown || isReorderMode) return;
       e.preventDefault();
       const x = e.pageX - scrollWrapper.offsetLeft;
-      const walk = (x - startX) * 1.5; // 滾動靈敏度
+      const walk = (x - startX) * 1.5;
       scrollWrapper.scrollLeft = scrollLeft - walk;
     });
 
@@ -757,10 +770,8 @@
       scrollWrapper.scrollBy({ left: amount, behavior: 'smooth' });
     }
 
-    // 點擊空白位置自動退出「調動次序」模式
     function handleGlobalClick(e) {
       if (!isReorderMode) return;
-      // 若點擊的不是調動按鈕或清單、Task 項目本體，則退出調動模式
       const isInteractive = e.target.closest('#reorderBtn, #sortableTabsContainer, #activeList');
       if (!isInteractive) {
         exitReorderMode();
@@ -780,7 +791,6 @@
       isReorderMode = true;
       updateReorderBtnStyle();
 
-      // 視覺凍結新增卡片
       document.getElementById('inputCard').classList.add('opacity-40', 'pointer-events-none');
       document.getElementById('addListBtn').classList.add('opacity-30', 'pointer-events-none');
       
@@ -809,7 +819,7 @@
         btn.className = `text-xs px-3.5 py-1.5 rounded-xl border font-bold transition flex items-center gap-1 ${theme.reorderBtnActive}`;
         btn.innerText = '✔ 完成排序';
       } else {
-        btn.className = `text-xs px-3 py-1.5 rounded-xl border font-semibold transition flex items-center gap-1 shadow-xs ${theme.subBtn}`;
+        btn.className = `text-xs px-3.5 py-1.5 rounded-xl border font-semibold transition flex items-center gap-1 shadow-xs ${theme.subBtn}`;
         btn.innerText = '⇅ 更改次序';
       }
     }
@@ -817,7 +827,6 @@
     function initSortableInstances() {
       destroySortableInstances();
 
-      // 1. 清單 Tab 拖曳排序實例（無延遲，按住即拉動）
       const tabsEl = document.getElementById('sortableTabsContainer');
       sortableTabsInstance = new Sortable(tabsEl, {
         animation: 180,
@@ -833,11 +842,10 @@
         }
       });
 
-      // 2. 待辦 Task 拖曳排序實例（無延遲，按住即拉動）
       const tasksEl = document.getElementById('activeList');
       sortableTasksInstance = new Sortable(tasksEl, {
         animation: 180,
-        delay: 0,
+        handle: '.drag-handle',
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
         onEnd: (evt) => {
@@ -868,6 +876,44 @@
       }
     }
 
+    function moveTaskToTop(taskId) {
+      const filteredTasks = currentTab === 'all' 
+        ? tasks 
+        : tasks.filter(t => t.listId === currentTab);
+      const activeTasks = filteredTasks.filter(t => !t.isCompleted);
+
+      const targetIdx = activeTasks.findIndex(t => t.id === taskId);
+      if (targetIdx <= 0) return;
+
+      const item = activeTasks.splice(targetIdx, 1)[0];
+      activeTasks.unshift(item);
+
+      updateTasksOrder(activeTasks);
+      if (window.dbBatchUpdateTasksOrder) {
+        window.dbBatchUpdateTasksOrder(activeTasks);
+      }
+      render();
+    }
+
+    function moveTaskToBottom(taskId) {
+      const filteredTasks = currentTab === 'all' 
+        ? tasks 
+        : tasks.filter(t => t.listId === currentTab);
+      const activeTasks = filteredTasks.filter(t => !t.isCompleted);
+
+      const targetIdx = activeTasks.findIndex(t => t.id === taskId);
+      if (targetIdx === -1 || targetIdx === activeTasks.length - 1) return;
+
+      const item = activeTasks.splice(targetIdx, 1)[0];
+      activeTasks.push(item);
+
+      updateTasksOrder(activeTasks);
+      if (window.dbBatchUpdateTasksOrder) {
+        window.dbBatchUpdateTasksOrder(activeTasks);
+      }
+      render();
+    }
+
     function renderTabs() {
       const theme = themes[currentThemeKey];
       const fixedContainer = document.getElementById('fixedTabContainer');
@@ -889,12 +935,10 @@
         const tab = document.createElement('div');
         tab.setAttribute('data-id', cat.id);
         
-        // 調動模式下加上抓取指針與輕微搖晃動畫
-        const reorderStyles = isReorderMode ? 'reorder-active-item ring-2 ring-amber-400/80 shadow-md' : 'cursor-pointer active:scale-95';
+        const reorderStyles = isReorderMode ? 'reorder-active-tab ring-2 ring-amber-400/80 shadow-md' : 'cursor-pointer active:scale-95';
         tab.className = `group flex items-center gap-1.5 px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 select-none ${isCurrent ? theme.activeTab : theme.inactiveTab} ${reorderStyles}`;
         tab.innerHTML = `<span>${isReorderMode ? '⠿ ' : ''}${cat.name}</span>`;
 
-        // 平時非調動模式：手機長按 550ms 彈出改名／刪除選單（純長按，不觸發拖動）
         if (!window.isReadOnlyShareMode && !isReorderMode) {
           tab.addEventListener('touchstart', () => {
             longPressTimer = setTimeout(() => {
@@ -960,31 +1004,50 @@
 
       activeTasks.forEach((task, index) => {
         const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
-        const priorityColorClass = theme.priorityCards[task.priority] || theme.priorityCards.Medium;
+        const priorityColorClass = theme.priorityCards[task.priority] || theme.priorityCards[""];
 
         const li = document.createElement('li');
         li.setAttribute('data-task-id', task.id);
 
-        const reorderStyles = isReorderMode ? 'reorder-active-item ring-2 ring-amber-400/80 shadow-md' : 'cursor-pointer hover:shadow';
-        li.className = `group flex items-center justify-between p-4 sm:p-5 rounded-2xl border transition-all select-none shadow-sm ${priorityColorClass} ${reorderStyles}`;
+        const cardClasses = isReorderMode ? 'ring-1 ring-amber-300/80 shadow-xs' : 'cursor-pointer hover:shadow';
+        li.className = `group flex items-center justify-between p-3.5 sm:p-5 rounded-2xl border transition-all select-none shadow-sm ${priorityColorClass} ${cardClasses}`;
+
+        const rightActionSection = isReorderMode 
+          ? `
+            <div class="flex items-center gap-1.5 flex-shrink-0" onclick="event.stopPropagation()">
+              <button onclick="moveTaskToTop('${task.id}')" title="置頂" class="px-2.5 py-1.5 rounded-xl border text-xs font-bold bg-white/90 dark:bg-stone-800/90 hover:bg-amber-100 hover:border-amber-400 active:scale-95 transition shadow-xs flex items-center gap-1">
+                <span>🔝</span><span class="hidden sm:inline">置頂</span>
+              </button>
+              <button onclick="moveTaskToBottom('${task.id}')" title="置底" class="px-2.5 py-1.5 rounded-xl border text-xs font-bold bg-white/90 dark:bg-stone-800/90 hover:bg-amber-100 hover:border-amber-400 active:scale-95 transition shadow-xs flex items-center gap-1">
+                <span>🔻</span><span class="hidden sm:inline">置底</span>
+              </button>
+            </div>
+          `
+          : `
+            <div class="flex items-center gap-3 flex-shrink-0" onclick="showDetail('${task.id}')">
+              <span class="text-xs sm:text-sm opacity-60 font-mono">${task.dueDate ? `📅 ${task.dueDate}` : '無期限'}</span>
+            </div>
+          `;
+
+        const leftHandleSection = isReorderMode
+          ? `<div class="drag-handle w-9 h-9 -ml-1 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/10 text-base font-bold opacity-80 cursor-grab active:cursor-grabbing flex-shrink-0" title="按住拖曳調位">⠿</div>`
+          : `<span class="font-mono text-sm font-semibold opacity-40 w-7 flex-shrink-0">#${index + 1}</span>`;
 
         li.innerHTML = `
-          <div class="flex items-center gap-3.5 min-w-0 flex-1" onclick="${isReorderMode ? 'event.stopPropagation()' : `showDetail('${task.id}')`}">
-            <span class="font-mono text-sm font-semibold opacity-40 w-7 flex-shrink-0">${isReorderMode ? '⠿' : `#${index + 1}`}</span>
+          <div class="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1" onclick="${isReorderMode ? 'event.stopPropagation()' : `showDetail('${task.id}')`}">
+            ${leftHandleSection}
             <button type="button" ${window.isReadOnlyShareMode || isReorderMode ? 'disabled' : ''} onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 transition active:scale-90 ${window.isReadOnlyShareMode || isReorderMode ? 'cursor-default' : ''}">
               <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition ${theme.accentCheck}">
               </div>
             </button>
-            <div class="min-w-0 pr-3 flex-1">
-              <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5">
-                <span class="text-base font-semibold tracking-tight truncate">${task.title}</span>
-                ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[11px] px-2 py-0.5 rounded-md font-medium border border-current opacity-60 w-fit">${catName}</span>` : ''}
+            <div class="min-w-0 pr-2 flex-1">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2.5">
+                <span class="text-sm sm:text-base font-semibold tracking-tight truncate">${task.title}</span>
+                ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md font-medium border border-current opacity-60 w-fit">${catName}</span>` : ''}
               </div>
             </div>
           </div>
-          <div class="flex items-center gap-3 flex-shrink-0" onclick="${isReorderMode ? 'event.stopPropagation()' : `showDetail('${task.id}')`}">
-            <span class="text-xs sm:text-sm opacity-60 font-mono">${task.dueDate ? `📅 ${task.dueDate}` : '無期限'}</span>
-          </div>
+          ${rightActionSection}
         `;
         activeList.appendChild(li);
       });
@@ -1109,7 +1172,7 @@
             taskBadge.className = `px-1.5 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs truncate cursor-pointer transition line-through bg-stone-200/70 text-stone-500 border border-stone-300/60`;
             taskBadge.innerHTML = `✓ ${task.title}`;
           } else {
-            const pClass = theme.priorityCards[task.priority] || theme.priorityCards.Medium;
+            const pClass = theme.priorityCards[task.priority] || theme.priorityCards[""];
             taskBadge.className = `px-1.5 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-semibold truncate cursor-pointer transition border shadow-xs ${pClass}`;
             taskBadge.innerText = `${noDeadlineTag}${task.title}`;
           }
@@ -1235,7 +1298,7 @@
         id: Date.now().toString(),
         listId: targetList,
         title,
-        priority,
+        priority: priority || "", // 預設為空白
         dueDate: dueDate || null,
         isCompleted: false,
         createdAt,
@@ -1357,7 +1420,7 @@
       updateModalView(task);
 
       document.getElementById('editTitleInput').value = task.title;
-      document.getElementById('editPrioritySelect').value = task.priority;
+      document.getElementById('editPrioritySelect').value = task.priority || "";
       document.getElementById('editDueDateInput').value = task.dueDate || '';
 
       const editListSelect = document.getElementById('editListSelect');
@@ -1391,7 +1454,13 @@
       document.getElementById('modalCreatedAt').innerText = task.createdAt;
       document.getElementById('modalDueDate').innerText = task.dueDate || '無期限';
       document.getElementById('modalCompletedAt').innerText = task.completedAt || '未完成';
-      document.getElementById('modalPriority').innerText = task.priority === 'High' ? '高 (柔和紅)' : (task.priority === 'Low' ? '低 (柔和綠)' : '中 (柔和黃)');
+      
+      let pText = '';
+      if (task.priority === 'High') pText = '高';
+      else if (task.priority === 'Medium') pText = '中';
+      else if (task.priority === 'Low') pText = '低';
+      
+      document.getElementById('modalPriority').innerText = pText;
     }
 
     function toggleEditMode() {
@@ -1440,7 +1509,7 @@
 
       task.title = newTitle;
       task.listId = document.getElementById('editListSelect').value;
-      task.priority = document.getElementById('editPrioritySelect').value;
+      task.priority = document.getElementById('editPrioritySelect').value || "";
       task.dueDate = document.getElementById('editDueDateInput').value || null;
 
       if (window.dbSaveTask) window.dbSaveTask(task);
@@ -1479,7 +1548,6 @@
       isEditing = false;
     }
 
-    // 快照與分享邏輯
     window.applySnapshotData = function(data) {
       tasks = data.tasks || [];
       categories = data.categories || [];
