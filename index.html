@@ -32,17 +32,15 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* 極低干擾的拖曳輔助樣式 */
     .sortable-ghost {
       opacity: 0.25 !important;
-      transform: scale(0.96) !important;
-      border: 2px dashed #94a3b8 !important;
+      transform: scale(0.98);
+      background-color: #cbd5e1 !important;
     }
-    .sortable-fallback {
-      opacity: 0.95 !important;
-      box-shadow: 0 16px 36px rgba(0,0,0,0.2) !important;
-      transform: scale(1.02) !important;
-      z-index: 9999 !important;
+    .sortable-chosen {
+      box-shadow: 0 14px 30px rgba(0,0,0,0.18) !important;
+      transform: scale(1.02);
+      z-index: 999 !important;
     }
     .drag-handle {
       touch-action: none !important;
@@ -50,16 +48,6 @@
     }
     .drag-handle:active {
       cursor: grabbing !important;
-    }
-    .reorder-active-tab {
-      cursor: grab !important;
-      touch-action: none !important;
-      animation: gentle-wobble 1.2s infinite ease-in-out;
-    }
-    @keyframes gentle-wobble {
-      0%, 100% { transform: rotate(0deg); }
-      25% { transform: rotate(-0.3deg); }
-      75% { transform: rotate(0.3deg); }
     }
   </style>
 </head>
@@ -543,12 +531,14 @@
       await setDoc(doc(db, `users/${currentUser.uid}/tasks`, task.id), task, { merge: true });
     };
 
+    // 只要有任何換位，即刻批次寫入 Firestore，確保次序永遠保存
     window.dbBatchUpdateTasksOrder = async (taskList) => {
       if (!currentUser || window.isReadOnlyShareMode) return;
-      for (let i = 0; i < taskList.length; i++) {
-        taskList[i].order = i;
-        await setDoc(doc(db, `users/${currentUser.uid}/tasks`, taskList[i].id), { order: i }, { merge: true });
-      }
+      const batchPromises = taskList.map((t, idx) => {
+        t.order = idx;
+        return setDoc(doc(db, `users/${currentUser.uid}/tasks`, t.id), { order: idx }, { merge: true });
+      });
+      await Promise.all(batchPromises);
     };
 
     window.dbDeleteTask = async (taskId) => {
@@ -578,7 +568,7 @@
     };
   </script>
 
-  <!-- 主題、UI、高靈敏拖曳與即時儲存邏輯 -->
+  <!-- 主題、UI、即時儲存步進調動次序邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -737,7 +727,7 @@
     let currentViewingTaskId = null;
     let isEditing = false;
     let tasks = [];
-    let currentSort = 'deadline';
+    let currentSort = 'manual'; // 調位模式下維持自訂手動順序
 
     let isReorderMode = false;
     let sortableTabsInstance = null;
@@ -828,7 +818,6 @@
       }
     }
 
-    // 核心優化：forceFallback 解決手機手勢死鎖，swapThreshold 0.1 實現輕輕一拉即插位
     function initSortableInstances() {
       destroySortableInstances();
 
@@ -836,14 +825,13 @@
       sortableTabsInstance = new Sortable(tabsEl, {
         animation: 150,
         delay: 0,
-        swapThreshold: 0.3,
-        forceFallback: true, // 規避 iOS 原生拖曳 Bug
+        swapThreshold: 0.2,
+        forceFallback: true,
         fallbackClass: 'sortable-fallback',
         ghostClass: 'sortable-ghost',
         onEnd: () => {
           const newOrderIds = Array.from(tabsEl.children).map(el => el.getAttribute('data-id'));
           categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
-          // 放手即刻同步最新清單次序
           if (window.dbBatchUpdateCategories) {
             window.dbBatchUpdateCategories(categories);
           }
@@ -855,9 +843,8 @@
         animation: 150,
         handle: '.drag-handle',
         direction: 'vertical',
-        swapThreshold: 0.1,          // 移過 10% 距離立即讓位，滑動極為敏感順暢
-        invertSwap: false,
-        forceFallback: true,         // 全面啟用自定義拖曳核心，手機絕不回彈
+        swapThreshold: 0.1,
+        forceFallback: true,
         fallbackClass: 'sortable-fallback',
         fallbackOnBody: true,
         scroll: true,
@@ -870,15 +857,11 @@
             : tasks.filter(t => t.listId === currentTab);
           const activeTasks = filteredTasks.filter(t => !t.isCompleted);
 
-          // 重新定位陣列
           const moved = activeTasks.splice(evt.oldIndex, 1)[0];
           activeTasks.splice(evt.newIndex, 0, moved);
 
-          // 放手即刻永久同步進度，失敗亦不會丟失進度
-          updateTasksOrder(activeTasks);
-          if (window.dbBatchUpdateTasksOrder) {
-            window.dbBatchUpdateTasksOrder(activeTasks);
-          }
+          // 每次放手即刻永久同步進度
+          applyImmediateTasksOrder(activeTasks);
         }
       });
     }
@@ -894,6 +877,48 @@
       }
     }
 
+    // 內部即時更新與儲存
+    function applyImmediateTasksOrder(newActiveList) {
+      currentSort = 'manual';
+      updateTasksOrder(newActiveList);
+      if (window.dbBatchUpdateTasksOrder) {
+        window.dbBatchUpdateTasksOrder(newActiveList);
+      }
+      render();
+    }
+
+    // 步進上移一格（即時生效與儲存）
+    function stepTaskUp(taskId) {
+      const filteredTasks = currentTab === 'all' 
+        ? tasks 
+        : tasks.filter(t => t.listId === currentTab);
+      const activeTasks = filteredTasks.filter(t => !t.isCompleted);
+
+      const idx = activeTasks.findIndex(t => t.id === taskId);
+      if (idx <= 0) return;
+
+      const item = activeTasks.splice(idx, 1)[0];
+      activeTasks.splice(idx - 1, 0, item);
+
+      applyImmediateTasksOrder(activeTasks);
+    }
+
+    // 步進下移一格（即時生效與儲存）
+    function stepTaskDown(taskId) {
+      const filteredTasks = currentTab === 'all' 
+        ? tasks 
+        : tasks.filter(t => t.listId === currentTab);
+      const activeTasks = filteredTasks.filter(t => !t.isCompleted);
+
+      const idx = activeTasks.findIndex(t => t.id === taskId);
+      if (idx === -1 || idx >= activeTasks.length - 1) return;
+
+      const item = activeTasks.splice(idx, 1)[0];
+      activeTasks.splice(idx + 1, 0, item);
+
+      applyImmediateTasksOrder(activeTasks);
+    }
+
     function moveTaskToTop(taskId) {
       const filteredTasks = currentTab === 'all' 
         ? tasks 
@@ -906,11 +931,7 @@
       const item = activeTasks.splice(targetIdx, 1)[0];
       activeTasks.unshift(item);
 
-      updateTasksOrder(activeTasks);
-      if (window.dbBatchUpdateTasksOrder) {
-        window.dbBatchUpdateTasksOrder(activeTasks);
-      }
-      render();
+      applyImmediateTasksOrder(activeTasks);
     }
 
     function moveTaskToBottom(taskId) {
@@ -925,11 +946,7 @@
       const item = activeTasks.splice(targetIdx, 1)[0];
       activeTasks.push(item);
 
-      updateTasksOrder(activeTasks);
-      if (window.dbBatchUpdateTasksOrder) {
-        window.dbBatchUpdateTasksOrder(activeTasks);
-      }
-      render();
+      applyImmediateTasksOrder(activeTasks);
     }
 
     function renderTabs() {
@@ -1030,15 +1047,21 @@
         const cardClasses = isReorderMode ? 'ring-1 ring-amber-300/80 shadow-xs' : 'cursor-pointer hover:shadow';
         li.className = `group flex items-center justify-between p-3.5 sm:p-5 rounded-2xl border transition-all select-none shadow-sm ${priorityColorClass} ${cardClasses}`;
 
-        // 明確固定實體白底深色文字按鈕
+        // 步進控制列：提供 上移、下移、置頂、置底 四合一，保證手指即按即動且絕不失敗
         const rightActionSection = isReorderMode 
           ? `
-            <div class="flex items-center gap-1.5 flex-shrink-0" onclick="event.stopPropagation()">
-              <button onclick="moveTaskToTop('${task.id}')" title="置頂" class="px-2.5 py-1.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs font-bold hover:bg-amber-100 hover:border-amber-400 active:scale-95 transition shadow-xs flex items-center gap-1">
-                <span>🔝</span><span class="inline">置頂</span>
+            <div class="flex items-center gap-1 sm:gap-1.5 flex-shrink-0" onclick="event.stopPropagation()">
+              <button onclick="stepTaskUp('${task.id}')" title="上移一格" class="w-8 h-8 sm:w-auto sm:px-2.5 py-1 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs font-bold hover:bg-amber-100 hover:border-amber-400 active:scale-90 transition shadow-xs flex items-center justify-center">
+                ▲
               </button>
-              <button onclick="moveTaskToBottom('${task.id}')" title="置底" class="px-2.5 py-1.5 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs font-bold hover:bg-amber-100 hover:border-amber-400 active:scale-95 transition shadow-xs flex items-center gap-1">
-                <span>🔻</span><span class="inline">置底</span>
+              <button onclick="stepTaskDown('${task.id}')" title="下移一格" class="w-8 h-8 sm:w-auto sm:px-2.5 py-1 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs font-bold hover:bg-amber-100 hover:border-amber-400 active:scale-90 transition shadow-xs flex items-center justify-center">
+                ▼
+              </button>
+              <button onclick="moveTaskToTop('${task.id}')" title="置頂" class="px-2 sm:px-2.5 py-1 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs font-bold hover:bg-amber-100 hover:border-amber-400 active:scale-90 transition shadow-xs flex items-center gap-1">
+                <span>🔝</span><span class="hidden sm:inline">置頂</span>
+              </button>
+              <button onclick="moveTaskToBottom('${task.id}')" title="置底" class="px-2 sm:px-2.5 py-1 rounded-xl border border-stone-300 bg-white text-stone-900 text-xs font-bold hover:bg-amber-100 hover:border-amber-400 active:scale-90 transition shadow-xs flex items-center gap-1">
+                <span>🔻</span><span class="hidden sm:inline">置底</span>
               </button>
             </div>
           `
@@ -1048,7 +1071,6 @@
             </div>
           `;
 
-        // 加大觸控手柄面積
         const leftHandleSection = isReorderMode
           ? `<div class="drag-handle w-11 h-11 -ml-1.5 flex items-center justify-center rounded-xl bg-black/10 dark:bg-white/20 text-xl font-bold opacity-90 cursor-grab active:cursor-grabbing flex-shrink-0 select-none" title="按住拖曳調位">⠿</div>`
           : `<span class="font-mono text-sm font-semibold opacity-40 w-7 flex-shrink-0">#${index + 1}</span>`;
@@ -1238,7 +1260,7 @@
       if (isCalendarMode) {
         renderCalendar();
       } else {
-        applyCurrentSort();
+        render();
       }
     }
 
@@ -1272,7 +1294,7 @@
         });
         if (currentTab === catId) currentTab = 'all';
         renderTabs();
-        applyCurrentSort();
+        render();
       }
     }
 
@@ -1300,7 +1322,7 @@
         task.completedAt = null;
       }
       if (window.dbSaveTask) window.dbSaveTask(task);
-      applyCurrentSort();
+      render();
     }
 
     function addTask() {
@@ -1330,7 +1352,7 @@
       if (window.dbSaveTask) window.dbSaveTask(newTask);
 
       document.getElementById('taskInput').value = '';
-      applyCurrentSort();
+      render();
     }
 
     function toggleSortMode() {
@@ -1349,6 +1371,8 @@
         tasks.sort((a, b) => (a.dueDate || '9999') > (b.dueDate || '9999') ? 1 : -1);
       } else if (currentSort === 'created') {
         tasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      } else if (currentSort === 'manual') {
+        tasks.sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
       }
       render();
     }
@@ -1357,7 +1381,6 @@
       const currentActiveIds = new Set(newActiveList.map(t => t.id));
       const untouchedTasks = tasks.filter(t => !currentActiveIds.has(t.id));
       tasks = [...newActiveList, ...untouchedTasks];
-      render();
     }
 
     function promptBatchDelete() {
@@ -1540,7 +1563,7 @@
       if (isCalendarMode) {
         renderCalendar();
       } else {
-        applyCurrentSort();
+        render();
       }
     }
 
@@ -1585,7 +1608,7 @@
       document.getElementById('reorderBtn')?.classList.add('hidden');
 
       renderTabs();
-      applyCurrentSort();
+      render();
     };
 
     window.syncCategoriesFromDB = function(newCats) {
@@ -1594,7 +1617,9 @@
     };
     window.syncTasksFromDB = function(newTasks) {
       tasks = newTasks;
-      applyCurrentSort();
+      // 確保按 order 排序
+      tasks.sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
+      render();
     };
     window.resetToGuestData = function() {
       tasks = [];
