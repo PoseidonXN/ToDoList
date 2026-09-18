@@ -7,8 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="To-Do List" />
-  <link rel="apple-touch-icon" href="Icon_180x180.png" />
-  <link rel="icon" type="image/png" href="Icon.png" />
+  <link rel="apple-touch-icon" href="./Icon_180x180.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./Icon_180x180.png" />
+  <link rel="icon" type="image/png" href="./Icon.png" />
 
   <link rel="manifest" href='data:application/manifest+json;utf-8,%7B%22name%22%3A%22To-Do%20List%22%2C%22short_name%22%3A%22To-Do%22%2C%22start_url%22%3A%22.%2Findex.html%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FBF9F5%22%2C%22theme_color%22%3A%22%23FBF9F5%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22Icon.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22Icon_180x180.png%22%2C%22sizes%22%3A%22180x180%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D' />
 
@@ -31,20 +32,29 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     .sortable-ghost {
-      opacity: 0.3;
+      opacity: 0.35;
       transform: scale(0.97);
     }
     .sortable-chosen {
-      box-shadow: 0 10px 25px rgba(0,0,0,0.12);
-      transform: scale(1.03);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      transform: scale(1.02);
       z-index: 99;
+    }
+    .reorder-active-item {
+      cursor: grab !important;
+      animation: gentle-wobble 1.2s infinite ease-in-out;
+    }
+    @keyframes gentle-wobble {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-0.3deg); }
+      75% { transform: rotate(0.3deg); }
     }
   </style>
 </head>
-<body id="appBody" class="min-h-screen flex flex-col items-center p-3.5 sm:p-8 relative">
+<body id="appBody" class="min-h-screen flex flex-col items-center p-3 sm:p-8 relative" onclick="handleGlobalClick(event)">
 
-  <!-- 唯讀分享快照橫幅（若為接收者檢視模式時顯示） -->
-  <aside id="shareBanner" aria-label="分享模式通知" class="hidden w-full max-w-2xl mb-4 p-3.5 bg-amber-100/90 text-amber-900 border border-amber-300 rounded-2xl flex items-center justify-between shadow-sm">
+  <!-- 唯讀分享快照橫幅 -->
+  <aside id="shareBanner" aria-label="分享模式通知" class="hidden w-full max-w-4xl mb-4 p-3.5 bg-amber-100/90 text-amber-900 border border-amber-300 rounded-2xl flex items-center justify-between shadow-sm">
     <div class="text-xs">
       <span class="font-bold">📸 清單靜態快照</span> · <span id="shareBannerSubtitle">唯讀檢視</span>
     </div>
@@ -59,20 +69,24 @@
     <span id="toastMessage" class="text-xs font-medium">做得好！又邁進咗一步！</span>
   </div>
 
-  <main class="w-full max-w-2xl space-y-6 pb-20">
+  <main class="w-full max-w-4xl space-y-6 pb-20">
     
-    <!-- 頂部標題列：左上角新增「📤 分享」掣 -->
+    <!-- 頂部標題列 -->
     <header id="appHeader" class="flex items-center justify-between border-b pb-4 w-full px-1">
-      <div class="w-auto flex items-center justify-start">
-        <button onclick="handleShareCurrentList()" id="shareBtn" class="text-xs px-3 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm">
+      <div class="flex items-center gap-2">
+        <button onclick="handleShareCurrentList()" id="shareBtn" class="text-xs px-2.5 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm">
           <span>📤</span>
           <span>分享</span>
+        </button>
+        <button onclick="toggleCalendarView()" id="calendarToggleBtn" class="text-xs px-2.5 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm">
+          <span>📅</span>
+          <span id="calendarToggleText">月曆模式</span>
         </button>
       </div>
 
       <h1 id="appTitle" class="text-2xl sm:text-3xl font-bold tracking-tight text-center flex-1">To-Do List</h1>
 
-      <div class="w-auto flex items-center gap-2 justify-end">
+      <div class="flex items-center gap-2 justify-end">
         <button onclick="openSettingsModal()" id="settingsBtn" class="p-2 rounded-xl border opacity-80 hover:opacity-100 transition flex items-center justify-center" title="應用程式設定">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         </button>
@@ -82,60 +96,96 @@
       </div>
     </header>
 
-    <!-- 清單分類切換欄 (Tabs 放大一倍) -->
-    <section id="tabsSection" class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
-      <div id="fixedTabContainer" class="flex-shrink-0"></div>
-      <div id="sortableTabsContainer" class="flex items-center gap-2.5 flex-nowrap"></div>
-      <button onclick="promptAddNewList()" id="addListBtn" class="px-5 py-3 rounded-2xl border border-dashed text-sm font-semibold whitespace-nowrap transition flex-shrink-0">
-        ＋ 新增清單
+    <!-- 清單分類切換欄：加入電腦版左右箭咀與滑鼠拖拉滾動 -->
+    <section id="tabsSection" class="relative flex items-center group/tabbar py-1">
+      <button onclick="scrollTabs(-200)" id="tabScrollLeftBtn" class="hidden sm:flex absolute left-0 z-10 p-2 rounded-xl border bg-white/90 dark:bg-stone-900/90 shadow-md opacity-0 group-hover/tabbar:opacity-100 transition">
+        ◀
+      </button>
+
+      <div id="tabsScrollWrapper" class="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1 w-full cursor-grab active:cursor-grabbing scroll-smooth">
+        <div id="fixedTabContainer" class="flex-shrink-0"></div>
+        <div id="sortableTabsContainer" class="flex items-center gap-2.5 flex-nowrap"></div>
+        <button onclick="promptAddNewList()" id="addListBtn" class="px-5 py-3 rounded-2xl border border-dashed text-sm font-semibold whitespace-nowrap transition flex-shrink-0">
+          ＋ 新增清單
+        </button>
+      </div>
+
+      <button onclick="scrollTabs(200)" id="tabScrollRightBtn" class="hidden sm:flex absolute right-0 z-10 p-2 rounded-xl border bg-white/90 dark:bg-stone-900/90 shadow-md opacity-0 group-hover/tabbar:opacity-100 transition">
+        ▶
       </button>
     </section>
 
-    <!-- 新增 Task 輸入卡片 -->
-    <section id="inputCard" class="p-5 rounded-2xl border space-y-3.5 transition-all shadow-sm">
-      <div class="flex gap-2">
-        <input id="taskInput" type="text" placeholder="新增待辦事項..." class="flex-1 px-3.5 py-2.5 text-base rounded-xl border focus:outline-none transition" />
-        <button onclick="addTask()" id="submitTaskBtn" class="px-5 py-2.5 rounded-xl text-sm font-semibold transition flex-shrink-0">
-          加入
-        </button>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs pt-1">
-        <div class="flex items-center gap-1.5">
-          <span class="opacity-60 flex-shrink-0">歸屬清單:</span>
-          <select id="taskTargetList" class="w-full border rounded-lg px-2.5 py-2 focus:outline-none"></select>
+    <!-- 列表模式容器 -->
+    <div id="listViewContainer" class="space-y-6">
+      <!-- 新增 Task 輸入卡片（調動模式下會暫時變暗不可用） -->
+      <section id="inputCard" class="p-5 rounded-2xl border space-y-3.5 transition-all shadow-sm">
+        <div class="flex gap-2">
+          <input id="taskInput" type="text" placeholder="新增待辦事項..." class="flex-1 px-3.5 py-2.5 text-base rounded-xl border focus:outline-none transition" />
+          <button onclick="addTask()" id="submitTaskBtn" class="px-5 py-2.5 rounded-xl text-sm font-semibold transition flex-shrink-0">
+            加入
+          </button>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span class="opacity-60 flex-shrink-0">優先程度:</span>
-          <select id="taskPriority" class="w-full border rounded-lg px-2.5 py-2 focus:outline-none">
-            <option value="High">高 (柔和紅)</option>
-            <option value="Medium" selected>中 (柔和黃)</option>
-            <option value="Low">低 (柔和綠)</option>
-          </select>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs pt-1">
+          <div class="flex items-center gap-1.5">
+            <span class="opacity-60 flex-shrink-0">歸屬清單:</span>
+            <select id="taskTargetList" class="w-full border rounded-lg px-2.5 py-2 focus:outline-none"></select>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="opacity-60 flex-shrink-0">優先程度:</span>
+            <select id="taskPriority" class="w-full border rounded-lg px-2.5 py-2 focus:outline-none">
+              <option value="High">高 (柔和紅)</option>
+              <option value="Medium" selected>中 (柔和黃)</option>
+              <option value="Low">低 (柔和綠)</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="opacity-60 flex-shrink-0">截止日期:</span>
+            <input id="taskDueDate" type="date" class="w-full border rounded-lg px-2.5 py-2 focus:outline-none" />
+          </div>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span class="opacity-60 flex-shrink-0">截止日期:</span>
-          <input id="taskDueDate" type="date" class="w-full border rounded-lg px-2.5 py-2 focus:outline-none" />
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- 進行中列表 (Active Tasks) -->
-    <section class="space-y-3.5">
-      <div class="flex justify-between items-center px-1">
-        <h2 id="activeHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">待辦事項 (<span id="activeCount">0</span>)</h2>
-        <span class="text-[11px] opacity-50">動態編號 #1, #2...</span>
-      </div>
-      <ul id="activeList" class="space-y-3"></ul>
-    </section>
+      <!-- 進行中列表：抬頭右側加入「更改次序」掣 -->
+      <section class="space-y-3.5" id="activeSection">
+        <div class="flex justify-between items-center px-1">
+          <h2 id="activeHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">待辦事項 (<span id="activeCount">0</span>)</h2>
+          <button onclick="event.stopPropagation(); toggleReorderMode()" id="reorderBtn" class="text-xs px-3 py-1.5 rounded-xl border font-semibold transition flex items-center gap-1 shadow-xs">
+            ⇅ 更改次序
+          </button>
+        </div>
+        <ul id="activeList" class="space-y-3"></ul>
+      </section>
 
-    <!-- 已完成列表 (Completed Tasks) -->
-    <section id="completedSection" class="space-y-3.5 pt-6 border-t">
-      <div class="flex justify-between items-center px-1">
-        <h2 id="completedHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">已完成任務 (<span id="completedCount">0</span>)</h2>
-        <span class="text-[11px] opacity-50">動態編號 #C1, #C2...</span>
+      <!-- 已完成列表 -->
+      <section id="completedSection" class="space-y-3.5 pt-6 border-t">
+        <div class="flex justify-between items-center px-1">
+          <h2 id="completedHeader" class="text-xs font-bold tracking-wider uppercase opacity-70">已完成任務 (<span id="completedCount">0</span>)</h2>
+          <span class="text-[11px] opacity-50">動態編號 #C1, #C2...</span>
+        </div>
+        <ul id="completedList" class="space-y-2.5 opacity-80"></ul>
+      </section>
+    </div>
+
+    <!-- 月曆模式容器 -->
+    <div id="calendarViewContainer" class="hidden space-y-4">
+      <div id="calendarHeaderCard" class="flex items-center justify-between p-4 rounded-2xl border shadow-sm">
+        <div class="flex items-center gap-3">
+          <h2 id="calendarMonthTitle" class="text-base sm:text-lg font-bold tracking-tight"></h2>
+          <button onclick="goToCurrentMonth()" class="text-xs px-2.5 py-1 rounded-xl border opacity-70 hover:opacity-100 transition">今天</button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button onclick="changeMonth(-1)" class="p-2 rounded-xl border opacity-70 hover:opacity-100 transition">◀</button>
+          <button onclick="changeMonth(1)" class="p-2 rounded-xl border opacity-70 hover:opacity-100 transition">▶</button>
+        </div>
       </div>
-      <ul id="completedList" class="space-y-2.5 opacity-80"></ul>
-    </section>
+
+      <div id="calendarCard" class="p-3 sm:p-5 rounded-3xl border shadow-sm space-y-2">
+        <div class="grid grid-cols-7 gap-1 sm:gap-2 text-center text-xs font-semibold opacity-60 pb-2 border-b">
+          <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+        </div>
+        <div id="calendarGrid" class="grid grid-cols-7 gap-1 sm:gap-2"></div>
+      </div>
+    </div>
 
   </main>
 
@@ -166,7 +216,7 @@
     </div>
   </div>
 
-  <!-- 全新「⚙️ 設定」管理 Modal -->
+  <!-- 「⚙️ 設定」管理 Modal -->
   <div id="settingsModal" class="fixed inset-0 backdrop-blur-sm hidden items-center justify-center p-4 z-50 transition-opacity">
     <div id="settingsModalBox" class="max-w-md w-full rounded-3xl p-6 space-y-5 border shadow-2xl">
       <div class="flex justify-between items-center border-b pb-3">
@@ -327,7 +377,7 @@
     </div>
   </div>
 
-  <!-- Firebase 模組 (已修復快照讀取與資料通道) -->
+  <!-- Firebase 模組 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { 
@@ -371,7 +421,6 @@
     let unsubscribeTasks = null;
     let unsubscribeCategories = null;
 
-    // 檢查 URL Query 是否包含 ?share=ID (唯讀快照模式)
     const urlParams = new URLSearchParams(window.location.search);
     const shareId = urlParams.get('share');
 
@@ -390,7 +439,6 @@
           const data = snapDoc.data();
           window.isReadOnlyShareMode = true;
 
-          // 透過輪詢通道確保底層 render 函數準備妥當後立即注入快照
           const injectSnapshot = () => {
             if (window.applySnapshotData) {
               window.applySnapshotData(data);
@@ -470,7 +518,6 @@
       });
     }
 
-    // 生成並上傳快照
     window.dbCreateSnapshot = async (snapshotData) => {
       const snapId = 'snap_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
       await setDoc(doc(db, 'shared_lists', snapId), snapshotData);
@@ -480,6 +527,14 @@
     window.dbSaveTask = async (task) => {
       if (!currentUser || window.isReadOnlyShareMode) return;
       await setDoc(doc(db, `users/${currentUser.uid}/tasks`, task.id), task, { merge: true });
+    };
+
+    window.dbBatchUpdateTasksOrder = async (taskList) => {
+      if (!currentUser || window.isReadOnlyShareMode) return;
+      for (let i = 0; i < taskList.length; i++) {
+        taskList[i].order = i;
+        await setDoc(doc(db, `users/${currentUser.uid}/tasks`, taskList[i].id), { order: i }, { merge: true });
+      }
     };
 
     window.dbDeleteTask = async (taskId) => {
@@ -509,7 +564,7 @@
     };
   </script>
 
-  <!-- 主題、UI、長按拖曳與快照渲染核心邏輯 -->
+  <!-- 主題、UI、調動次序模式與橫向滑動互動邏輯 -->
   <script>
     const themes = {
       warm: {
@@ -531,7 +586,10 @@
           Low:    'bg-emerald-50/75 border-emerald-200/90 text-stone-800 hover:border-emerald-300'
         },
         accentCheck: 'border-stone-400/80 bg-white/80 hover:border-stone-700',
-        checkedBg: 'bg-stone-700 text-stone-50'
+        checkedBg: 'bg-stone-700 text-stone-50',
+        calendarCell: 'bg-stone-50/50 border-stone-200/60',
+        calendarToday: 'border-stone-800 ring-1 ring-stone-800 bg-white',
+        reorderBtnActive: 'bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-300'
       },
       apple: {
         bodyBg: '#F2F2F7',
@@ -552,7 +610,10 @@
           Low:    'bg-emerald-50/85 border-emerald-200 text-neutral-900 hover:border-emerald-300'
         },
         accentCheck: 'border-neutral-400/70 bg-white hover:border-blue-500',
-        checkedBg: 'bg-blue-600 text-white'
+        checkedBg: 'bg-blue-600 text-white',
+        calendarCell: 'bg-neutral-100/50 border-neutral-200/60',
+        calendarToday: 'border-blue-600 ring-1 ring-blue-600 bg-white',
+        reorderBtnActive: 'bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-300'
       },
       linear: {
         bodyBg: '#09090B',
@@ -573,7 +634,10 @@
           Low:    'bg-emerald-950/35 border-emerald-900/50 text-emerald-100 hover:border-emerald-700/70'
         },
         accentCheck: 'border-zinc-600 bg-zinc-950 hover:border-zinc-300',
-        checkedBg: 'bg-zinc-200 text-zinc-950 font-bold'
+        checkedBg: 'bg-zinc-200 text-zinc-950 font-bold',
+        calendarCell: 'bg-zinc-950/60 border-zinc-800/80',
+        calendarToday: 'border-zinc-100 ring-1 ring-zinc-100 bg-zinc-900',
+        reorderBtnActive: 'bg-zinc-100 text-zinc-950 border-white shadow-md ring-2 ring-zinc-400'
       }
     };
 
@@ -591,9 +655,13 @@
       body.style.backgroundColor = theme.bodyBg;
       body.className = `min-h-screen flex flex-col items-center p-3.5 sm:p-8 relative ${theme.textColor}`;
 
-      document.getElementById('shareBtn').className = `text-xs px-3 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm ${theme.subBtn}`;
+      document.getElementById('shareBtn').className = `text-xs px-2.5 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm ${theme.subBtn}`;
+      document.getElementById('calendarToggleBtn').className = `text-xs px-2.5 py-1.5 rounded-xl border opacity-90 hover:opacity-100 transition flex items-center gap-1.5 font-medium shadow-sm ${theme.subBtn}`;
       document.getElementById('settingsBtn').className = `p-2 rounded-xl border opacity-80 hover:opacity-100 transition flex items-center justify-center ${theme.subBtn}`;
       document.getElementById('authBtn').className = `text-xs px-2.5 py-1.5 rounded-xl border opacity-80 hover:opacity-100 transition ${theme.subBtn}`;
+
+      document.getElementById('tabScrollLeftBtn').className = `hidden sm:flex absolute left-0 z-10 p-2 rounded-xl border opacity-0 group-hover/tabbar:opacity-100 transition ${theme.subBtn}`;
+      document.getElementById('tabScrollRightBtn').className = `hidden sm:flex absolute right-0 z-10 p-2 rounded-xl border opacity-0 group-hover/tabbar:opacity-100 transition ${theme.subBtn}`;
 
       document.getElementById('themeSelector').className = `px-3 py-1.5 rounded-xl border text-xs font-medium focus:outline-none cursor-pointer ${theme.subBtn}`;
       document.getElementById('themeSelector').value = currentThemeKey;
@@ -610,6 +678,9 @@
       document.getElementById('taskPriority').className = `w-full border rounded-lg px-2.5 py-2 focus:outline-none ${theme.inputBg}`;
       document.getElementById('taskDueDate').className = `w-full border rounded-lg px-2.5 py-2 focus:outline-none ${theme.inputBg}`;
       document.getElementById('submitTaskBtn').className = `px-5 py-2.5 rounded-xl text-sm font-semibold transition ${theme.primaryBtn}`;
+
+      document.getElementById('calendarHeaderCard').className = `flex items-center justify-between p-4 rounded-2xl border shadow-sm ${theme.cardBg} ${theme.borderColor}`;
+      document.getElementById('calendarCard').className = `p-3 sm:p-5 rounded-3xl border shadow-sm space-y-2 ${theme.cardBg} ${theme.borderColor}`;
 
       document.getElementById('settingsModalBox').className = `max-w-md w-full rounded-3xl p-6 space-y-5 border shadow-2xl ${theme.modalBg}`;
       document.getElementById('shareResultBox').className = `max-w-md w-full rounded-3xl p-6 space-y-4 border shadow-2xl ${theme.modalBg}`;
@@ -632,11 +703,11 @@
 
       document.getElementById('tabActionBox').className = `w-full max-w-xs rounded-2xl p-4 space-y-3 border shadow-2xl ${theme.modalBg}`;
 
+      updateReorderBtnStyle();
       renderTabs();
       render();
     }
 
-    // 業務狀態變數
     let categories = [
       { id: 'cat_work', name: '工作教案', order: 0 },
       { id: 'cat_life', name: '日常待辦', order: 1 }
@@ -647,233 +718,153 @@
     let isEditing = false;
     let tasks = [];
     let currentSort = 'deadline';
+
+    // 調動模式開關
+    let isReorderMode = false;
     let sortableTabsInstance = null;
+    let sortableTasksInstance = null;
 
     let activeLongPressCatId = null;
     let longPressTimer = null;
-    let isDraggingTab = false;
 
-    // 關鍵修復：供 Firebase 模組注入快照資料
-    window.applySnapshotData = function(data) {
-      tasks = data.tasks || [];
-      categories = data.categories || [];
-      currentTab = 'all'; // 快照以全部工作方式完整展示
+    let isCalendarMode = false;
+    let calendarDate = new Date();
 
-      // 顯示快照提示橫幅
-      const banner = document.getElementById('shareBanner');
-      if (banner) banner.classList.remove('hidden');
-      const subtitle = document.getElementById('shareBannerSubtitle');
-      if (subtitle) subtitle.innerText = `${data.listTitle || '全部工作'} (發布於 ${data.sharedAt || ''})`;
+    // 電腦版滑鼠 Drag-to-Scroll (抓取橫向滾動) 實現
+    const scrollWrapper = document.getElementById('tabsScrollWrapper');
+    let isMouseDown = false;
+    let startX, scrollLeft;
 
-      // 隱藏非唯讀互動組件
-      document.getElementById('inputCard')?.classList.add('hidden');
-      document.getElementById('addListBtn')?.classList.add('hidden');
-      document.getElementById('authBtn')?.classList.add('hidden');
-      document.getElementById('shareBtn')?.classList.add('hidden');
+    scrollWrapper.addEventListener('mousedown', (e) => {
+      // 若點擊的是 Tab 按鈕本身則不干擾調動模式
+      if (isReorderMode) return;
+      isMouseDown = true;
+      startX = e.pageX - scrollWrapper.offsetLeft;
+      scrollLeft = scrollWrapper.scrollLeft;
+    });
 
-      renderTabs();
-      applyCurrentSort();
-    };
+    scrollWrapper.addEventListener('mouseleave', () => { isMouseDown = false; });
+    scrollWrapper.addEventListener('mouseup', () => { isMouseDown = false; });
+    scrollWrapper.addEventListener('mousemove', (e) => {
+      if (!isMouseDown || isReorderMode) return;
+      e.preventDefault();
+      const x = e.pageX - scrollWrapper.offsetLeft;
+      const walk = (x - startX) * 1.5; // 滾動靈敏度
+      scrollWrapper.scrollLeft = scrollLeft - walk;
+    });
 
-    // 供 Firebase 模組登入同步
-    window.syncCategoriesFromDB = function(newCats) {
-      categories = newCats;
-      renderTabs();
-    };
-    window.syncTasksFromDB = function(newTasks) {
-      tasks = newTasks;
-      applyCurrentSort();
-    };
-    window.resetToGuestData = function() {
-      tasks = [];
-      categories = [
-        { id: 'cat_work', name: '工作教案', order: 0 },
-        { id: 'cat_life', name: '日常待辦', order: 1 }
-      ];
+    function scrollTabs(amount) {
+      scrollWrapper.scrollBy({ left: amount, behavior: 'smooth' });
+    }
+
+    // 點擊空白位置自動退出「調動次序」模式
+    function handleGlobalClick(e) {
+      if (!isReorderMode) return;
+      // 若點擊的不是調動按鈕或清單、Task 項目本體，則退出調動模式
+      const isInteractive = e.target.closest('#reorderBtn, #sortableTabsContainer, #activeList');
+      if (!isInteractive) {
+        exitReorderMode();
+      }
+    }
+
+    function toggleReorderMode() {
+      if (isReorderMode) {
+        exitReorderMode();
+      } else {
+        enterReorderMode();
+      }
+    }
+
+    function enterReorderMode() {
+      if (window.isReadOnlyShareMode) return;
+      isReorderMode = true;
+      updateReorderBtnStyle();
+
+      // 視覺凍結新增卡片
+      document.getElementById('inputCard').classList.add('opacity-40', 'pointer-events-none');
+      document.getElementById('addListBtn').classList.add('opacity-30', 'pointer-events-none');
+      
+      initSortableInstances();
       renderTabs();
       render();
-    };
-
-    // 快照分享生成邏輯
-    async function handleShareCurrentList() {
-      const currentListTasks = (currentTab === 'all' 
-        ? tasks 
-        : tasks.filter(t => t.listId === currentTab));
-
-      if (currentListTasks.length === 0) {
-        alert("當前清單未有任何待辦或已完成事項，無法生成分享。");
-        return;
-      }
-
-      const activeCat = categories.find(c => c.id === currentTab);
-      const listTitle = currentTab === 'all' ? '全部工作' : (activeCat ? activeCat.name : '自訂清單');
-      
-      const now = new Date();
-      const sharedAt = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-
-      const shareBtn = document.getElementById('shareBtn');
-      shareBtn.innerText = '⏳ 生成中...';
-
-      try {
-        const snapshotData = {
-          listTitle: listTitle,
-          tabId: currentTab,
-          categories: categories,
-          tasks: currentListTasks,
-          sharedAt: sharedAt
-        };
-
-        let snapId;
-        if (window.dbCreateSnapshot) {
-          snapId = await window.dbCreateSnapshot(snapshotData);
-        } else {
-          snapId = 'local_' + Date.now();
-        }
-
-        const shareUrl = `${window.location.origin}${window.location.pathname}?share=${snapId}`;
-
-        if (navigator.share) {
-          try {
-            await navigator.share({
-              title: `To-Do 快照：${listTitle}`,
-              text: `這是 ${listTitle} 的待辦任務快照（發布於 ${sharedAt}）：`,
-              url: shareUrl
-            });
-            shareBtn.innerHTML = '<span>📤</span><span>分享</span>';
-            return;
-          } catch (e) {}
-        }
-
-        document.getElementById('shareUrlInput').value = shareUrl;
-        document.getElementById('shareResultModal').classList.remove('hidden');
-        document.getElementById('shareResultModal').classList.add('flex');
-      } catch (err) {
-        alert("生成分享連結失敗: " + err.message);
-      } finally {
-        shareBtn.innerHTML = '<span>📤</span><span>分享</span>';
-      }
     }
 
-    function copyShareUrl() {
-      const input = document.getElementById('shareUrlInput');
-      input.select();
-      input.setSelectionRange(0, 99999);
-      navigator.clipboard.writeText(input.value);
-      const copyBtn = document.getElementById('copyShareBtn');
-      copyBtn.innerText = '已複製 ✔';
-      setTimeout(() => { copyBtn.innerText = '複製'; }, 2000);
+    function exitReorderMode() {
+      if (!isReorderMode) return;
+      isReorderMode = false;
+      updateReorderBtnStyle();
+
+      document.getElementById('inputCard').classList.remove('opacity-40', 'pointer-events-none');
+      document.getElementById('addListBtn').classList.remove('opacity-30', 'pointer-events-none');
+
+      destroySortableInstances();
+      renderTabs();
+      render();
     }
 
-    function closeShareResultModal() {
-      document.getElementById('shareResultModal').classList.add('hidden');
-      document.getElementById('shareResultModal').classList.remove('flex');
-    }
-
-    function openSettingsModal() {
-      document.getElementById('settingsModal').classList.remove('hidden');
-      document.getElementById('settingsModal').classList.add('flex');
-    }
-    function closeSettingsModal() {
-      document.getElementById('settingsModal').classList.add('hidden');
-      document.getElementById('settingsModal').classList.remove('flex');
-    }
-    function openPraiseModalFromSettings() {
-      closeSettingsModal();
-      openPraiseModal();
-    }
-    function triggerBatchDeleteFromSettings() {
-      closeSettingsModal();
-      promptBatchDelete();
-    }
-
-    // 鼓勵庫
-    const defaultPraises = [
-      { icon: '✨', text: '搞掂一單！今日又進步咗少少。' },
-      { icon: '👏', text: '做得好！專注力滿分！' },
-      { icon: '☕', text: '完成得好俐落，飲啖水放鬆下先！' },
-      { icon: '🔥', text: '狀態大勇，節奏保持得好好！' },
-      { icon: '🌱', text: '每日一小步，累積起嚟就係巨大成果！' },
-      { icon: '🎯', text: '又清咗一件心事，個人即刻輕鬆哂！' },
-      { icon: '💪', text: '執行力超強，繼續保持呢份動力！' }
-    ];
-
-    let praises = JSON.parse(localStorage.getItem('custom_praises')) || defaultPraises;
-
-    function savePraises() {
-      localStorage.setItem('custom_praises', JSON.stringify(praises));
-    }
-
-    let toastTimer = null;
-    function triggerPraise() {
-      if (praises.length === 0) return;
-      const random = praises[Math.floor(Math.random() * praises.length)];
-      const toast = document.getElementById('praiseToast');
-      document.getElementById('toastIcon').innerText = random.icon || '✨';
-      document.getElementById('toastMessage').innerText = random.text;
-
-      toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
-      toast.classList.add('translate-y-0', 'opacity-100');
-
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => {
-        toast.classList.remove('translate-y-0', 'opacity-100');
-        toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
-      }, 2600);
-    }
-
-    function openPraiseModal() {
-      renderPraiseList();
-      document.getElementById('praiseModal').classList.remove('hidden');
-      document.getElementById('praiseModal').classList.add('flex');
-    }
-
-    function closePraiseModal() {
-      document.getElementById('praiseModal').classList.add('hidden');
-      document.getElementById('praiseModal').classList.remove('flex');
-    }
-
-    function renderPraiseList() {
-      const list = document.getElementById('praiseItemsList');
+    function updateReorderBtnStyle() {
+      const btn = document.getElementById('reorderBtn');
       const theme = themes[currentThemeKey];
-      list.innerHTML = '';
-      praises.forEach((item, index) => {
-        const li = document.createElement('li');
-        li.className = `flex items-center justify-between p-2 rounded-xl border text-xs ${theme.cardBg} ${theme.borderColor}`;
-        li.innerHTML = `
-          <div class="flex items-center gap-2 truncate pr-2">
-            <span class="text-sm">${item.icon}</span>
-            <span class="truncate">${item.text}</span>
-          </div>
-          <button onclick="removePraiseItem(${index})" class="opacity-60 hover:text-rose-500 px-1.5 py-0.5 rounded transition">✕</button>
-        `;
-        list.appendChild(li);
+      if (isReorderMode) {
+        btn.className = `text-xs px-3.5 py-1.5 rounded-xl border font-bold transition flex items-center gap-1 ${theme.reorderBtnActive}`;
+        btn.innerText = '✔ 完成排序';
+      } else {
+        btn.className = `text-xs px-3 py-1.5 rounded-xl border font-semibold transition flex items-center gap-1 shadow-xs ${theme.subBtn}`;
+        btn.innerText = '⇅ 更改次序';
+      }
+    }
+
+    function initSortableInstances() {
+      destroySortableInstances();
+
+      // 1. 清單 Tab 拖曳排序實例（無延遲，按住即拉動）
+      const tabsEl = document.getElementById('sortableTabsContainer');
+      sortableTabsInstance = new Sortable(tabsEl, {
+        animation: 180,
+        delay: 0,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: () => {
+          const newOrderIds = Array.from(tabsEl.children).map(el => el.getAttribute('data-id'));
+          categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
+          if (window.dbBatchUpdateCategories) {
+            window.dbBatchUpdateCategories(categories);
+          }
+        }
+      });
+
+      // 2. 待辦 Task 拖曳排序實例（無延遲，按住即拉動）
+      const tasksEl = document.getElementById('activeList');
+      sortableTasksInstance = new Sortable(tasksEl, {
+        animation: 180,
+        delay: 0,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: (evt) => {
+          const filteredTasks = currentTab === 'all' 
+            ? tasks 
+            : tasks.filter(t => t.listId === currentTab);
+          const activeTasks = filteredTasks.filter(t => !t.isCompleted);
+
+          const moved = activeTasks.splice(evt.oldIndex, 1)[0];
+          activeTasks.splice(evt.newIndex, 0, moved);
+
+          updateTasksOrder(activeTasks);
+          if (window.dbBatchUpdateTasksOrder) {
+            window.dbBatchUpdateTasksOrder(activeTasks);
+          }
+        }
       });
     }
 
-    function addPraiseItem() {
-      const textInput = document.getElementById('newPraiseText');
-      const iconInput = document.getElementById('newPraiseIcon');
-      const text = textInput.value.trim();
-      const icon = iconInput.value.trim() || '✨';
-
-      if (!text) return;
-      praises.push({ icon, text });
-      savePraises();
-      renderPraiseList();
-      textInput.value = '';
-    }
-
-    function removePraiseItem(index) {
-      praises.splice(index, 1);
-      savePraises();
-      renderPraiseList();
-    }
-
-    function resetDefaultPraises() {
-      if (confirm('確定要恢復預設語錄嗎？')) {
-        praises = [...defaultPraises];
-        savePraises();
-        renderPraiseList();
+    function destroySortableInstances() {
+      if (sortableTabsInstance) {
+        sortableTabsInstance.destroy();
+        sortableTabsInstance = null;
+      }
+      if (sortableTasksInstance) {
+        sortableTasksInstance.destroy();
+        sortableTasksInstance = null;
       }
     }
 
@@ -888,34 +879,33 @@
       if (select) select.innerHTML = '';
 
       const allBtn = document.createElement('button');
-      allBtn.className = `px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 ${currentTab === 'all' ? theme.activeTab : theme.inactiveTab}`;
+      allBtn.className = `px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 ${currentTab === 'all' ? theme.activeTab : theme.inactiveTab} ${isReorderMode ? 'opacity-40 cursor-not-allowed' : ''}`;
       allBtn.innerText = '📋 全部工作';
-      allBtn.onclick = () => switchTab('all');
+      allBtn.onclick = () => { if (!isReorderMode) switchTab('all'); };
       fixedContainer.appendChild(allBtn);
 
       categories.forEach((cat) => {
         const isCurrent = currentTab === cat.id;
         const tab = document.createElement('div');
         tab.setAttribute('data-id', cat.id);
-        tab.className = `group flex items-center gap-1.5 px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 cursor-pointer select-none active:scale-95 ${isCurrent ? theme.activeTab : theme.inactiveTab}`;
-        tab.innerHTML = `<span>${cat.name}</span>`;
+        
+        // 調動模式下加上抓取指針與輕微搖晃動畫
+        const reorderStyles = isReorderMode ? 'reorder-active-item ring-2 ring-amber-400/80 shadow-md' : 'cursor-pointer active:scale-95';
+        tab.className = `group flex items-center gap-1.5 px-5 py-3 rounded-2xl text-sm sm:text-base font-bold transition whitespace-nowrap flex-shrink-0 select-none ${isCurrent ? theme.activeTab : theme.inactiveTab} ${reorderStyles}`;
+        tab.innerHTML = `<span>${isReorderMode ? '⠿ ' : ''}${cat.name}</span>`;
 
-        if (!window.isReadOnlyShareMode) {
+        // 平時非調動模式：手機長按 550ms 彈出改名／刪除選單（純長按，不觸發拖動）
+        if (!window.isReadOnlyShareMode && !isReorderMode) {
           tab.addEventListener('touchstart', () => {
-            isDraggingTab = false;
             longPressTimer = setTimeout(() => {
-              if (!isDraggingTab) {
-                if (navigator.vibrate) navigator.vibrate(40);
-                openTabActionModal(cat.id, cat.name);
-              }
-            }, 600);
+              if (navigator.vibrate) navigator.vibrate(40);
+              openTabActionModal(cat.id, cat.name);
+            }, 550);
           }, { passive: true });
 
           tab.addEventListener('touchmove', () => {
-            isDraggingTab = true;
             if (longPressTimer) clearTimeout(longPressTimer);
           });
-
           tab.addEventListener('touchend', () => {
             if (longPressTimer) clearTimeout(longPressTimer);
           });
@@ -926,10 +916,12 @@
           };
         }
 
-        tab.onclick = () => {
-          if (!isDraggingTab) {
-            switchTab(cat.id);
+        tab.onclick = (e) => {
+          if (isReorderMode) {
+            e.stopPropagation();
+            return;
           }
+          switchTab(cat.id);
         };
 
         sortableContainer.appendChild(tab);
@@ -942,37 +934,193 @@
           select.appendChild(opt);
         }
       });
+    }
 
-      if (!window.isReadOnlyShareMode) {
-        if (sortableTabsInstance) {
-          sortableTabsInstance.destroy();
-        }
-        sortableTabsInstance = new Sortable(sortableContainer, {
-          animation: 200,
-          delay: 250,
-          delayOnTouchOnly: true,
-          touchStartThreshold: 3,
-          ghostClass: 'sortable-ghost',
-          chosenClass: 'sortable-chosen',
-          onStart: () => {
-            isDraggingTab = true;
-            if (longPressTimer) clearTimeout(longPressTimer);
-            if (navigator.vibrate) navigator.vibrate(20);
-          },
-          onEnd: () => {
-            setTimeout(() => { isDraggingTab = false; }, 100);
-            const newOrderIds = Array.from(sortableContainer.children).map(el => el.getAttribute('data-id'));
-            categories.sort((a, b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
-            if (window.dbBatchUpdateCategories) {
-              window.dbBatchUpdateCategories(categories);
-            }
+    function render() {
+      if (isCalendarMode) {
+        renderCalendar();
+        return;
+      }
+
+      const theme = themes[currentThemeKey];
+      const activeList = document.getElementById('activeList');
+      const completedList = document.getElementById('completedList');
+      activeList.innerHTML = '';
+      completedList.innerHTML = '';
+
+      const filteredTasks = window.isReadOnlyShareMode 
+        ? tasks 
+        : (currentTab === 'all' ? tasks : tasks.filter(t => t.listId === currentTab));
+
+      const activeTasks = filteredTasks.filter(t => !t.isCompleted);
+      const completedTasks = filteredTasks.filter(t => t.isCompleted);
+
+      document.getElementById('activeCount').innerText = activeTasks.length;
+      document.getElementById('completedCount').innerText = completedTasks.length;
+
+      activeTasks.forEach((task, index) => {
+        const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
+        const priorityColorClass = theme.priorityCards[task.priority] || theme.priorityCards.Medium;
+
+        const li = document.createElement('li');
+        li.setAttribute('data-task-id', task.id);
+
+        const reorderStyles = isReorderMode ? 'reorder-active-item ring-2 ring-amber-400/80 shadow-md' : 'cursor-pointer hover:shadow';
+        li.className = `group flex items-center justify-between p-4 sm:p-5 rounded-2xl border transition-all select-none shadow-sm ${priorityColorClass} ${reorderStyles}`;
+
+        li.innerHTML = `
+          <div class="flex items-center gap-3.5 min-w-0 flex-1" onclick="${isReorderMode ? 'event.stopPropagation()' : `showDetail('${task.id}')`}">
+            <span class="font-mono text-sm font-semibold opacity-40 w-7 flex-shrink-0">${isReorderMode ? '⠿' : `#${index + 1}`}</span>
+            <button type="button" ${window.isReadOnlyShareMode || isReorderMode ? 'disabled' : ''} onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 transition active:scale-90 ${window.isReadOnlyShareMode || isReorderMode ? 'cursor-default' : ''}">
+              <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition ${theme.accentCheck}">
+              </div>
+            </button>
+            <div class="min-w-0 pr-3 flex-1">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5">
+                <span class="text-base font-semibold tracking-tight truncate">${task.title}</span>
+                ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[11px] px-2 py-0.5 rounded-md font-medium border border-current opacity-60 w-fit">${catName}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 flex-shrink-0" onclick="${isReorderMode ? 'event.stopPropagation()' : `showDetail('${task.id}')`}">
+            <span class="text-xs sm:text-sm opacity-60 font-mono">${task.dueDate ? `📅 ${task.dueDate}` : '無期限'}</span>
+          </div>
+        `;
+        activeList.appendChild(li);
+      });
+
+      const sortedCompleted = completedTasks.slice().reverse();
+      sortedCompleted.forEach((task, index) => {
+        const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
+        const li = document.createElement('li');
+        li.className = `flex items-center justify-between p-3.5 sm:p-4 rounded-2xl border transition cursor-pointer ${theme.modalBox}`;
+        li.onclick = () => { if (!isReorderMode) showDetail(task.id); };
+
+        li.innerHTML = `
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <span class="font-mono text-xs sm:text-sm font-semibold opacity-40 w-8 flex-shrink-0">#C${index + 1}</span>
+            <button type="button" ${window.isReadOnlyShareMode || isReorderMode ? 'disabled' : ''} onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 active:scale-90 transition ${window.isReadOnlyShareMode || isReorderMode ? 'cursor-default' : ''}">
+              <div class="w-6 h-6 rounded-lg flex items-center justify-center shadow-sm ${theme.checkedBg}">
+                <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+            </button>
+            <div class="flex items-center gap-2 truncate pr-2">
+              <span class="text-sm sm:text-base line-through truncate opacity-50">${task.title}</span>
+              ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 border ${theme.borderColor} opacity-50">${catName}</span>` : ''}
+            </div>
+          </div>
+          <span class="text-[11px] opacity-50 font-mono flex-shrink-0">完成於: ${task.completedAt}</span>
+        `;
+        completedList.appendChild(li);
+      });
+    }
+
+    function toggleCalendarView() {
+      if (isReorderMode) exitReorderMode();
+      isCalendarMode = !isCalendarMode;
+      const listContainer = document.getElementById('listViewContainer');
+      const calContainer = document.getElementById('calendarViewContainer');
+      const toggleText = document.getElementById('calendarToggleText');
+
+      if (isCalendarMode) {
+        listContainer.classList.add('hidden');
+        calContainer.classList.remove('hidden');
+        toggleText.innerText = '列表模式';
+        renderCalendar();
+      } else {
+        listContainer.classList.remove('hidden');
+        calContainer.classList.add('hidden');
+        toggleText.innerText = '月曆模式';
+        render();
+      }
+    }
+
+    function changeMonth(delta) {
+      calendarDate.setMonth(calendarDate.getMonth() + delta);
+      renderCalendar();
+    }
+
+    function goToCurrentMonth() {
+      calendarDate = new Date();
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const year = calendarDate.getFullYear();
+      const month = calendarDate.getMonth();
+      document.getElementById('calendarMonthTitle').innerText = `${year} 年 ${month + 1} 月`;
+
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+
+      const firstDayOfWeek = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const theme = themes[currentThemeKey];
+
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      const filteredTasks = window.isReadOnlyShareMode 
+        ? tasks 
+        : (currentTab === 'all' ? tasks : tasks.filter(t => t.listId === currentTab));
+
+      for (let i = 0; i < firstDayOfWeek; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'min-h-[85px] sm:min-h-[105px] rounded-xl sm:rounded-2xl border border-transparent opacity-20';
+        grid.appendChild(emptyCell);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isToday = (dateStr === todayStr);
+
+        const cell = document.createElement('div');
+        cell.className = `min-h-[85px] sm:min-h-[105px] p-1.5 sm:p-2 rounded-xl sm:rounded-2xl border transition-all flex flex-col justify-start gap-1 overflow-hidden ${theme.calendarCell} ${isToday ? theme.calendarToday : ''}`;
+
+        cell.innerHTML = `
+          <div class="text-[11px] sm:text-xs font-mono font-bold flex items-center justify-between ${isToday ? 'opacity-100 text-blue-600' : 'opacity-60'}">
+            <span>${day}</span>
+            ${isToday ? '<span class="text-[10px] px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 font-sans">今天</span>' : ''}
+          </div>
+          <div class="space-y-1 overflow-y-auto no-scrollbar max-h-24 sm:max-h-28 flex-1" id="day-tasks-${dateStr}"></div>
+        `;
+
+        grid.appendChild(cell);
+
+        const matchedTasks = filteredTasks.filter(t => {
+          if (t.dueDate) {
+            return t.dueDate === dateStr;
+          } else {
+            return isToday;
           }
+        });
+
+        const dayTaskContainer = cell.querySelector(`#day-tasks-${dateStr}`);
+        matchedTasks.forEach(task => {
+          const taskBadge = document.createElement('div');
+          taskBadge.onclick = (e) => {
+            e.stopPropagation();
+            showDetail(task.id);
+          };
+
+          const noDeadlineTag = !task.dueDate ? '📌 ' : '';
+
+          if (task.isCompleted) {
+            taskBadge.className = `px-1.5 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs truncate cursor-pointer transition line-through bg-stone-200/70 text-stone-500 border border-stone-300/60`;
+            taskBadge.innerHTML = `✓ ${task.title}`;
+          } else {
+            const pClass = theme.priorityCards[task.priority] || theme.priorityCards.Medium;
+            taskBadge.className = `px-1.5 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-semibold truncate cursor-pointer transition border shadow-xs ${pClass}`;
+            taskBadge.innerText = `${noDeadlineTag}${task.title}`;
+          }
+
+          dayTaskContainer.appendChild(taskBadge);
         });
       }
     }
 
     function openTabActionModal(catId, catName) {
-      if (window.isReadOnlyShareMode) return;
+      if (window.isReadOnlyShareMode || isReorderMode) return;
       activeLongPressCatId = catId;
       document.getElementById('tabActionTitle').innerText = `清單：${catName}`;
       const modal = document.getElementById('tabActionModal');
@@ -1004,7 +1152,11 @@
     function switchTab(tabId) {
       currentTab = tabId;
       renderTabs();
-      applyCurrentSort();
+      if (isCalendarMode) {
+        renderCalendar();
+      } else {
+        applyCurrentSort();
+      }
     }
 
     function renameCategory(catId) {
@@ -1042,7 +1194,7 @@
     }
 
     function promptAddNewList() {
-      if (window.isReadOnlyShareMode) return;
+      if (window.isReadOnlyShareMode || isReorderMode) return;
       const name = prompt('請輸入新清單名稱：');
       if (!name || !name.trim()) return;
       const newId = 'cat_' + Date.now();
@@ -1052,97 +1204,8 @@
       switchTab(newId);
     }
 
-    function render() {
-      const theme = themes[currentThemeKey];
-      const activeList = document.getElementById('activeList');
-      const completedList = document.getElementById('completedList');
-      activeList.innerHTML = '';
-      completedList.innerHTML = '';
-
-      // 唯讀快照模式下直接渲染快照包含的全部任務
-      const filteredTasks = window.isReadOnlyShareMode 
-        ? tasks 
-        : (currentTab === 'all' ? tasks : tasks.filter(t => t.listId === currentTab));
-
-      const activeTasks = filteredTasks.filter(t => !t.isCompleted);
-      const completedTasks = filteredTasks.filter(t => t.isCompleted);
-
-      document.getElementById('activeCount').innerText = activeTasks.length;
-      document.getElementById('completedCount').innerText = completedTasks.length;
-
-      activeTasks.forEach((task, index) => {
-        const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
-        const priorityColorClass = theme.priorityCards[task.priority] || theme.priorityCards.Medium;
-
-        const li = document.createElement('li');
-        li.setAttribute('data-task-id', task.id);
-        li.className = `group flex items-center justify-between p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer select-none shadow-sm hover:shadow ${priorityColorClass}`;
-
-        li.innerHTML = `
-          <div class="flex items-center gap-3.5 min-w-0 flex-1" onclick="showDetail('${task.id}')">
-            <span class="font-mono text-sm font-semibold opacity-40 w-7 flex-shrink-0">#${index + 1}</span>
-            <button type="button" ${window.isReadOnlyShareMode ? 'disabled' : ''} onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 transition active:scale-90 ${window.isReadOnlyShareMode ? 'cursor-default' : ''}">
-              <div class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition ${theme.accentCheck}">
-              </div>
-            </button>
-            <div class="min-w-0 pr-3 flex-1">
-              <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5">
-                <span class="text-base font-semibold tracking-tight truncate">${task.title}</span>
-                ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[11px] px-2 py-0.5 rounded-md font-medium border border-current opacity-60 w-fit">${catName}</span>` : ''}
-              </div>
-            </div>
-          </div>
-          <div class="flex items-center gap-3 flex-shrink-0" onclick="showDetail('${task.id}')">
-            <span class="text-xs sm:text-sm opacity-60 font-mono">${task.dueDate ? `📅 ${task.dueDate}` : '無期限'}</span>
-          </div>
-        `;
-        activeList.appendChild(li);
-      });
-
-      if (!window.isReadOnlyShareMode) {
-        new Sortable(activeList, {
-          animation: 150,
-          delay: 200,
-          delayOnTouchOnly: true,
-          ghostClass: 'sortable-ghost',
-          onEnd: (evt) => {
-            const moved = activeTasks.splice(evt.oldIndex, 1)[0];
-            activeTasks.splice(evt.newIndex, 0, moved);
-            currentSort = 'manual';
-            document.getElementById('sortModeDesc').innerText = '當前：手動排序中';
-            updateTasksOrder(activeTasks);
-          }
-        });
-      }
-
-      const sortedCompleted = completedTasks.slice().reverse();
-      sortedCompleted.forEach((task, index) => {
-        const catName = categories.find(c => c.id === task.listId)?.name || '未分類';
-        const li = document.createElement('li');
-        li.className = `flex items-center justify-between p-3.5 sm:p-4 rounded-2xl border transition cursor-pointer ${theme.modalBox}`;
-        li.onclick = () => showDetail(task.id);
-
-        li.innerHTML = `
-          <div class="flex items-center gap-3 min-w-0 flex-1">
-            <span class="font-mono text-xs sm:text-sm font-semibold opacity-40 w-8 flex-shrink-0">#C${index + 1}</span>
-            <button type="button" ${window.isReadOnlyShareMode ? 'disabled' : ''} onclick="event.stopPropagation(); toggleTask('${task.id}')" class="p-1 -ml-1 flex-shrink-0 active:scale-90 transition ${window.isReadOnlyShareMode ? 'cursor-default' : ''}">
-              <div class="w-6 h-6 rounded-lg flex items-center justify-center shadow-sm ${theme.checkedBg}">
-                <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
-              </div>
-            </button>
-            <div class="flex items-center gap-2 truncate pr-2">
-              <span class="text-sm sm:text-base line-through truncate opacity-50">${task.title}</span>
-              ${currentTab === 'all' || window.isReadOnlyShareMode ? `<span class="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 border ${theme.borderColor} opacity-50">${catName}</span>` : ''}
-            </div>
-          </div>
-          <span class="text-[11px] opacity-50 font-mono flex-shrink-0">完成於: ${task.completedAt}</span>
-        `;
-        completedList.appendChild(li);
-      });
-    }
-
     function toggleTask(id) {
-      if (window.isReadOnlyShareMode) return;
+      if (window.isReadOnlyShareMode || isReorderMode) return;
       const task = tasks.find(t => t.id === id);
       if (!task) return;
       task.isCompleted = !task.isCompleted;
@@ -1158,7 +1221,7 @@
     }
 
     function addTask() {
-      if (window.isReadOnlyShareMode) return;
+      if (window.isReadOnlyShareMode || isReorderMode) return;
       const title = document.getElementById('taskInput').value.trim();
       if (!title) return;
       const priority = document.getElementById('taskPriority').value;
@@ -1176,7 +1239,8 @@
         dueDate: dueDate || null,
         isCompleted: false,
         createdAt,
-        completedAt: null
+        completedAt: null,
+        order: tasks.length
       };
 
       tasks.push(newTask);
@@ -1214,7 +1278,7 @@
     }
 
     function promptBatchDelete() {
-      if (window.isReadOnlyShareMode) return;
+      if (window.isReadOnlyShareMode || isReorderMode) return;
       const filteredTasks = currentTab === 'all' 
         ? tasks 
         : tasks.filter(t => t.listId === currentTab);
@@ -1284,6 +1348,7 @@
     }
 
     function showDetail(id) {
+      if (isReorderMode) return;
       currentViewingTaskId = id;
       isEditing = false;
       const task = tasks.find(t => t.id === id);
@@ -1383,7 +1448,11 @@
       updateModalView(task);
       isEditing = false;
       renderModalState();
-      applyCurrentSort();
+      if (isCalendarMode) {
+        renderCalendar();
+      } else {
+        applyCurrentSort();
+      }
     }
 
     function deleteCurrentTask() {
@@ -1395,7 +1464,11 @@
         if (window.dbDeleteTask) window.dbDeleteTask(currentViewingTaskId);
         tasks = tasks.filter(t => t.id !== currentViewingTaskId);
         closeModal();
-        render();
+        if (isCalendarMode) {
+          renderCalendar();
+        } else {
+          render();
+        }
       }
     }
 
@@ -1404,6 +1477,226 @@
       document.getElementById('detailModal').classList.remove('flex');
       currentViewingTaskId = null;
       isEditing = false;
+    }
+
+    // 快照與分享邏輯
+    window.applySnapshotData = function(data) {
+      tasks = data.tasks || [];
+      categories = data.categories || [];
+      currentTab = 'all';
+
+      const banner = document.getElementById('shareBanner');
+      if (banner) banner.classList.remove('hidden');
+      const subtitle = document.getElementById('shareBannerSubtitle');
+      if (subtitle) subtitle.innerText = `${data.listTitle || '全部工作'} (發布於 ${data.sharedAt || ''})`;
+
+      document.getElementById('inputCard')?.classList.add('hidden');
+      document.getElementById('addListBtn')?.classList.add('hidden');
+      document.getElementById('authBtn')?.classList.add('hidden');
+      document.getElementById('shareBtn')?.classList.add('hidden');
+      document.getElementById('reorderBtn')?.classList.add('hidden');
+
+      renderTabs();
+      applyCurrentSort();
+    };
+
+    window.syncCategoriesFromDB = function(newCats) {
+      categories = newCats;
+      renderTabs();
+    };
+    window.syncTasksFromDB = function(newTasks) {
+      tasks = newTasks;
+      applyCurrentSort();
+    };
+    window.resetToGuestData = function() {
+      tasks = [];
+      categories = [
+        { id: 'cat_work', name: '工作教案', order: 0 },
+        { id: 'cat_life', name: '日常待辦', order: 1 }
+      ];
+      renderTabs();
+      render();
+    };
+
+    async function handleShareCurrentList() {
+      const currentListTasks = (currentTab === 'all' 
+        ? tasks 
+        : tasks.filter(t => t.listId === currentTab));
+
+      if (currentListTasks.length === 0) {
+        alert("當前清單未有任何待辦或已完成事項，無法生成分享。");
+        return;
+      }
+
+      const activeCat = categories.find(c => c.id === currentTab);
+      const listTitle = currentTab === 'all' ? '全部工作' : (activeCat ? activeCat.name : '自訂清單');
+      
+      const now = new Date();
+      const sharedAt = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+      const shareBtn = document.getElementById('shareBtn');
+      shareBtn.innerText = '⏳ 生成中...';
+
+      try {
+        const snapshotData = {
+          listTitle: listTitle,
+          tabId: currentTab,
+          categories: categories,
+          tasks: currentListTasks,
+          sharedAt: sharedAt
+        };
+
+        let snapId;
+        if (window.dbCreateSnapshot) {
+          snapId = await window.dbCreateSnapshot(snapshotData);
+        } else {
+          snapId = 'local_' + Date.now();
+        }
+
+        const shareUrl = `${window.location.origin}${window.location.pathname}?share=${snapId}`;
+
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: `To-Do 快照：${listTitle}`,
+              text: `這是 ${listTitle} 的待辦任務快照（發布於 ${sharedAt}）：`,
+              url: shareUrl
+            });
+            shareBtn.innerHTML = '<span>📤</span><span>分享</span>';
+            return;
+          } catch (e) {}
+        }
+
+        document.getElementById('shareUrlInput').value = shareUrl;
+        document.getElementById('shareResultModal').classList.remove('hidden');
+        document.getElementById('shareResultModal').classList.add('flex');
+      } catch (err) {
+        alert("生成分享連結失敗: " + err.message);
+      } finally {
+        shareBtn.innerHTML = '<span>📤</span><span>分享</span>';
+      }
+    }
+
+    function copyShareUrl() {
+      const input = document.getElementById('shareUrlInput');
+      input.select();
+      input.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(input.value);
+      const copyBtn = document.getElementById('copyShareBtn');
+      copyBtn.innerText = '已複製 ✔';
+      setTimeout(() => { copyBtn.innerText = '複製'; }, 2000);
+    }
+
+    function closeShareResultModal() {
+      document.getElementById('shareResultModal').classList.add('hidden');
+      document.getElementById('shareResultModal').classList.remove('flex');
+    }
+
+    function openSettingsModal() {
+      document.getElementById('settingsModal').classList.remove('hidden');
+      document.getElementById('settingsModal').classList.add('flex');
+    }
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').classList.add('hidden');
+      document.getElementById('settingsModal').classList.remove('flex');
+    }
+    function openPraiseModalFromSettings() {
+      closeSettingsModal();
+      openPraiseModal();
+    }
+    function triggerBatchDeleteFromSettings() {
+      closeSettingsModal();
+      promptBatchDelete();
+    }
+
+    const defaultPraises = [
+      { icon: '✨', text: '搞掂一單！今日又進步咗少少。' },
+      { icon: '👏', text: '做得好！專注力滿分！' },
+      { icon: '☕', text: '完成得好俐落，飲啖水放鬆下先！' },
+      { icon: '🔥', text: '狀態大勇，節奏保持得好好！' },
+      { icon: '🌱', text: '每日一小步，累積起嚟就係巨大成果！' },
+      { icon: '🎯', text: '又清咗一件心事，個人即刻輕鬆哂！' },
+      { icon: '💪', text: '執行力超強，繼續保持呢份動力！' }
+    ];
+
+    let praises = JSON.parse(localStorage.getItem('custom_praises')) || defaultPraises;
+
+    function savePraises() {
+      localStorage.setItem('custom_praises', JSON.stringify(praises));
+    }
+
+    let toastTimer = null;
+    function triggerPraise() {
+      if (praises.length === 0) return;
+      const random = praises[Math.floor(Math.random() * praises.length)];
+      const toast = document.getElementById('praiseToast');
+      document.getElementById('toastIcon').innerText = random.icon || '✨';
+      document.getElementById('toastMessage').innerText = random.text;
+
+      toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+      }, 2600);
+    }
+
+    function openPraiseModal() {
+      renderPraiseList();
+      document.getElementById('praiseModal').classList.remove('hidden');
+      document.getElementById('praiseModal').classList.add('flex');
+    }
+
+    function closePraiseModal() {
+      document.getElementById('praiseModal').classList.add('hidden');
+      document.getElementById('praiseModal').classList.remove('flex');
+    }
+
+    function renderPraiseList() {
+      const list = document.getElementById('praiseItemsList');
+      const theme = themes[currentThemeKey];
+      list.innerHTML = '';
+      praises.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.className = `flex items-center justify-between p-2 rounded-xl border text-xs ${theme.cardBg} ${theme.borderColor}`;
+        li.innerHTML = `
+          <div class="flex items-center gap-2 truncate pr-2">
+            <span class="text-sm">${item.icon}</span>
+            <span class="truncate">${item.text}</span>
+          </div>
+          <button onclick="removePraiseItem(${index})" class="opacity-60 hover:text-rose-500 px-1.5 py-0.5 rounded transition">✕</button>
+        `;
+        list.appendChild(li);
+      });
+    }
+
+    function addPraiseItem() {
+      const textInput = document.getElementById('newPraiseText');
+      const iconInput = document.getElementById('newPraiseIcon');
+      const text = textInput.value.trim();
+      const icon = iconInput.value.trim() || '✨';
+
+      if (!text) return;
+      praises.push({ icon, text });
+      savePraises();
+      renderPraiseList();
+      textInput.value = '';
+    }
+
+    function removePraiseItem(index) {
+      praises.splice(index, 1);
+      savePraises();
+      renderPraiseList();
+    }
+
+    function resetDefaultPraises() {
+      if (confirm('確定要恢復預設語錄嗎？')) {
+        praises = [...defaultPraises];
+        savePraises();
+        renderPraiseList();
+      }
     }
 
     applyTheme();
